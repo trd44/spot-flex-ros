@@ -2,21 +2,21 @@
 
 ROS2 system for expanding Boston Dynamics Spot's manipulation capabilities. The robot executes multi-step plans potenitally involving navigation, obstacle pushing, cabinet opening, and item retrieval using trained manipulation policies.
 
-Initial Implementation: 
+Initial Implementation: 865ff99
 
 ## Project Structure
 
 ```
 workspace/src/
-├── spot_ros2/              # BD's official ROS2 driver
+├── spot_ros2/              # Boston Dynamic's official ROS2 driver
 ├── spot_flex_msgs/         # Custom action/service definitions
 ├── spot_flex_plan/         # Conductor node + task planner
 ├── spot_flex_perception/   # Object detection and localization
 ├── spot_flex_control/      # Navigation, arm control, policy server
-└── spot_flex_ui/           # Terminal command interface
+└── spot_flex_ui/           # Command interface
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
+See [documentation/ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
 
 ## External Tools and Libraries
 
