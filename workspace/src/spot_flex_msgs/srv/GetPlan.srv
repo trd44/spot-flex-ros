@@ -1,0 +1,8 @@
+# Request
+string task
+string item
+string location
+---
+# Response
+bool success
+string[] action_sequence

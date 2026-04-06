@@ -1,0 +1,42 @@
+{
+    "name": "spot-flex-ros",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "workspaceMount": "source=${localWorkspaceFolder},target=/repo,type=bind",
+    "workspaceFolder": "/repo",
+    "containerEnv": {
+        "ROS_DISTRO": "humble",
+        "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+        "SPOT_IP": "${localEnv:SPOT_IP:192.168.80.3}",
+        "SPOT_USERNAME": "${localEnv:SPOT_USERNAME:admin}",
+        "SPOT_PASSWORD": "${localEnv:SPOT_PASSWORD:}"
+    },
+    "runArgs": [
+        "--network=host",
+        "--privileged"
+    ],
+    "postCreateCommand": "bash -c 'cd /repo/workspace && rosdep install --from-paths src --ignore-src -r -y --skip-keys \"bosdyn bosdyn_msgs spot_wrapper bosdyn_cmake_module\" || true'",
+    "postStartCommand": "bash -c 'grep -q \"source /opt/ros/humble/setup.bash\" ~/.bashrc 2>/dev/null || echo \"source /opt/ros/humble/setup.bash\" >> ~/.bashrc; grep -q \"source /repo/workspace/install/setup.bash\" ~/.bashrc 2>/dev/null || echo \"source /repo/workspace/install/setup.bash 2>/dev/null\" >> ~/.bashrc'",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-iot.vscode-ros",
+                "ms-vscode.cpptools",
+                "redhat.vscode-xml",
+                "redhat.vscode-yaml",
+                "smilerobotics.urdf",
+                "DotJoshJohnson.xml"
+            ],
+            "settings": {
+                "python.analysis.extraPaths": [
+                    "/opt/ros/humble/lib/python3.10/dist-packages",
+                    "/repo/workspace/install"
+                ],
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+        }
+    }
+}

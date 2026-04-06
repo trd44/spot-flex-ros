@@ -1,0 +1,9 @@
+# Goal
+string object_name
+---
+# Result
+bool found
+geometry_msgs/PoseStamped object_pose
+---
+# Feedback
+string status

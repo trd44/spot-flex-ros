@@ -1,0 +1,11 @@
+# Goal
+string item_name
+string location
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string current_step
+float32 progress
