@@ -2,7 +2,7 @@
 
 ROS2 system for expanding Boston Dynamics Spot's manipulation capabilities. The robot executes multi-step plans potenitally involving navigation, obstacle pushing, cabinet opening, and item retrieval using trained manipulation policies.
 
-Initial Implementation: 865ff99
+Initial Implementation: c8455e4
 
 ## Project Structure
 
