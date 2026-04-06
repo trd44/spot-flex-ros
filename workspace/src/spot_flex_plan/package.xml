@@ -7,8 +7,6 @@
   <maintainer email="timothy.duggan@tufts.edu">Timothy Duggan</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
-
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>

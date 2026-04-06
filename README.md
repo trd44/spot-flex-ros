@@ -16,7 +16,7 @@ workspace/src/
 └── spot_flex_ui/           # Command interface
 ```
 
-See [documentation/ARCHITECTURE.md](ARCHITECTURE.md) for the full system design.
+See [documentation/ARCHITECTURE.md](documentation/ARCHITECTURE.md) for the full system design.
 
 ## External Tools and Libraries
 
