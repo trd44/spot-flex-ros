@@ -7,6 +7,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Add the Gazebo package repository. Modern Gazebo packages are hosted by OSRF,
+# not in the base ROS image repositories.
+RUN curl -fsSL https://packages.osrfoundation.org/gazebo.gpg \
+    -o /usr/share/keyrings/pkgs-osrf-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/pkgs-osrf-archive-keyring.gpg] https://packages.osrfoundation.org/gazebo/ubuntu-stable jammy main" \
+    > /etc/apt/sources.list.d/gazebo-stable.list
+
 # Core build tools and ROS packages
 RUN apt-get update -q && \
     apt-get install -yq --no-install-recommends \
@@ -22,8 +29,22 @@ RUN apt-get update -q && \
     python3-vcstool \
     python3-distutils \
     python3-apt \
+    python3-numpy \
+    python3-yaml \
     libpython3-dev \
     python3-tk \
+    xauth \
+    libegl1-mesa \
+    libgl1-mesa-dri \
+    libglu1-mesa \
+    libglx-mesa0 \
+    mesa-utils \
+    x11-utils \
+    x11-xserver-utils \
+    xvfb \
+    x11vnc \
+    novnc \
+    websockify \
     qttools5-dev \
     ros-humble-ros-base \
     ros-dev-tools \
@@ -36,9 +57,17 @@ RUN apt-get update -q && \
     ros-humble-xacro \
     ros-humble-tf2-ros \
     ros-humble-tf2-tools \
+    gz-fortress \
+    ros-humble-ign-ros2-control \
+    ros-humble-ros-gz \
     ros-humble-navigation2 \
     ros-humble-nav2-bringup \
+    ros-humble-slam-toolbox \
     ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-pcl-conversions \
+    ros-humble-pcl-ros \
+    ros-humble-tf2-sensor-msgs \
+    ros-humble-cv-bridge \
     && rm -rf /var/lib/apt/lists/*
 
 # Boston Dynamics SDK version (must match spot_ros2/spot_wrapper)

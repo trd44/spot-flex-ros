@@ -1,3 +1,6 @@
 [submodule "workspace/src/spot_ros2"]
 	path = workspace/src/spot_ros2
-	url = https://github.com/bdaiinstitute/spot_ros2.git
+	url = https://github.com/trd44/spot_ros2.git
+[submodule "workspace/src/spot_gazebo_ros2"]
+	path = workspace/src/spot_gazebo_ros2
+	url = https://github.com/g1y5x3/spot_gazebo_ros2.git

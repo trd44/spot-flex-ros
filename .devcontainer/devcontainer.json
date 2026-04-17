@@ -9,6 +9,12 @@
     "containerEnv": {
         "ROS_DISTRO": "humble",
         "RMW_IMPLEMENTATION": "rmw_cyclonedds_cpp",
+        "QT_X11_NO_MITSHM": "1",
+        "LIBGL_ALWAYS_SOFTWARE": "1",
+        "GALLIUM_DRIVER": "llvmpipe",
+        "LIBGL_DRI3_DISABLE": "1",
+        "XDG_RUNTIME_DIR": "/tmp/runtime-root",
+        "DISPLAY": ":1",
         "SPOT_IP": "${localEnv:SPOT_IP:192.168.80.3}",
         "SPOT_USERNAME": "${localEnv:SPOT_USERNAME:admin}",
         "SPOT_PASSWORD": "${localEnv:SPOT_PASSWORD:}"
@@ -18,7 +24,7 @@
         "--privileged"
     ],
     "postCreateCommand": "bash -c 'cd /repo/workspace && rosdep install --from-paths src --ignore-src -r -y --skip-keys \"bosdyn bosdyn_msgs spot_wrapper bosdyn_cmake_module\" || true'",
-    "postStartCommand": "bash -c 'grep -q \"source /opt/ros/humble/setup.bash\" ~/.bashrc 2>/dev/null || echo \"source /opt/ros/humble/setup.bash\" >> ~/.bashrc; grep -q \"source /repo/workspace/install/setup.bash\" ~/.bashrc 2>/dev/null || echo \"source /repo/workspace/install/setup.bash 2>/dev/null\" >> ~/.bashrc'",
+    "postStartCommand": "bash /repo/workspace/container_startup.sh",
     "customizations": {
         "vscode": {
             "extensions": [

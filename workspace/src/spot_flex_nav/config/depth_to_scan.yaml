@@ -1,0 +1,17 @@
+depth_to_scan:
+  ros__parameters:
+    # Real spot_driver publishes .../image (no _raw). Sim publishes _raw — pass
+    # depth_topic:=<...>image on the command line for real hardware.
+    depth_topic: /spot/depth/frontleft/image_raw
+    camera_info_topic: /spot/depth/frontleft/camera_info
+    scan_topic: /scan
+    scan_frame_id: base_link
+    horizontal_fov: 1.35
+    # Wider vertical band is more tolerant of Spot's body pitch while walking.
+    scan_height_pixels: 40
+    row_center_fraction: 0.5
+    # Match slam_toolbox's usable range. Beyond ~2.5 m stereo depth is noisy.
+    range_min: 0.3
+    range_max: 2.5
+    depth_scale_16uc1: 0.001
+    publish_rate_hz: 15.0

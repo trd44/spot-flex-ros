@@ -1,5 +1,7 @@
 # Project System Architecture
 
+Git repo: https://github.com/trd44/spot-flex-ros
+
 ## Overview
 
 Expand the Boston Dynamics Spot robot's capabilities to execute multi-step plans: navigating to locations, pushing obstacles, opening cabinets, retrieving items, and delivering them. The system uses trained manipulation policies for cabinet opening and box pushing.
