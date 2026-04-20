@@ -14,6 +14,8 @@
   <depend>spot_flex_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>tf2_ros</depend>
+  <depend>moveit_py</depend>
+  <depend>moveit_ros_planning_interface</depend>
 
   <export>
     <build_type>ament_python</build_type>

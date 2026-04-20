@@ -1,6 +1,6 @@
 # spot-flex-ros
 
-ROS2 system for expanding Boston Dynamics Spot's manipulation capabilities. The robot executes multi-step plans potenitally involving navigation, obstacle pushing, cabinet opening, and item retrieval using trained manipulation policies.
+ROS 2 system for extending Boston Dynamics Spot with navigation, perception, planning, and arm control.
 
 Initial Implementation: c8455e4
 
@@ -8,11 +8,13 @@ Initial Implementation: c8455e4
 
 ```
 workspace/src/
-├── spot_ros2/              # Boston Dynamic's official ROS2 driver
-├── spot_flex_msgs/         # Custom action/service definitions
-├── spot_flex_plan/         # Conductor node + task planner
+├── spot_ros2/              # Boston Dynamics ROS 2 driver
+├── spot_flex_msgs/         # Custom action and service definitions
+├── spot_flex_plan/         # Task planning and execution
 ├── spot_flex_perception/   # Object detection and localization
-├── spot_flex_control/      # Navigation, arm control, policy server
+├── spot_flex_control/      # Navigation and arm control
+├── spot_flex_moveit/       # MoveIt configuration for the arm
+├── spot_flex_sim/          # Simulation and browser GUI helpers
 └── spot_flex_ui/           # Command interface
 ```
 
@@ -20,13 +22,13 @@ See [documentation/ARCHITECTURE.md](documentation/ARCHITECTURE.md) for the full 
 
 ## External Tools and Libraries
 
-- spot_ros2 — ROS2 driver for Boston Dynamics Spot
-- Nav2 — navigation message interfaces
+- spot_ros2 - ROS 2 driver for Boston Dynamics Spot
+- Nav2 - navigation stack
 - MoveIt! - Arm planner and control
 - OWL-ViT - open-vocabulary object detection
-- Segment Anything - Object segementation and edge detection
+- Segment Anything - object segmentation and edge detection
 - YOLO - higher frequency object detection
-- Docker / VS Code Dev COntainers
+- Docker / VS Code Dev Containers
 
 ## Development Setup
 
@@ -43,45 +45,28 @@ cp .env_example .env # edit .env with the actual Spot IP and password
 # 3. Open in VS Code, then Reopen in Container
 
 # 4. Inside the container, build the workspace:
-cd /ros_ws
+cd /repo/workspace
 colcon build --symlink-install
 source install/setup.bash
 
 # Run nodes
 ```
 
-### GUI Tools In The Dev Container
+### noVNC Browser GUI
 
-The dev container now sources `/repo/workspace/src/spot_ros2/scripts/ros_gui_env.sh` for new shells so ROS GUI tools
-default to Mesa software rendering, which is much more reliable in containers.
+For macOS and container setups, the browser path is more reliable than direct X11 for Gazebo and RViz.
 
-On macOS with XQuartz:
-
-```bash
-# on the Mac host, then restart XQuartz
-defaults write org.xquartz.X11 enable_iglx -bool true
-```
-
-Then inside the container:
-
-```bash
-export SPOT_X11_DISPLAY=host.docker.internal:0
-source /repo/workspace/src/spot_ros2/scripts/ros_gui_env.sh
-ros2 launch spot_description description.launch.py arm:=True
-```
-
-If RViz is still unhappy, verify in XQuartz Preferences that network clients are allowed, then restart XQuartz and the
-dev container.
-
-### Optional Gazebo GUI In The Browser
-
-Gazebo Fortress GUI is not reliable over macOS Docker + XQuartz GLX. The repo now includes an
-optional browser-based path that keeps the current headless/native flows intact:
+Start the virtual display:
 
 ```bash
 cd /repo/workspace
 ./src/spot_flex_sim/scripts/start_virtual_display.sh
 source ./src/spot_flex_sim/scripts/virtual_display_env.sh
+```
+
+Launch simulation tools on that display:
+
+```bash
 ros2 launch spot_flex_sim simulation.launch.py headless:=false rviz:=true
 ```
 
@@ -91,29 +76,55 @@ Then forward container port `6080` and open:
 http://localhost:6080/vnc.html?autoconnect=1&resize=scale
 ```
 
-There is also a convenience wrapper that starts the virtual display and launches Gazebo in one step:
+There is also a wrapper that starts the display and launches Gazebo in one step:
 
 ```bash
 cd /repo/workspace
 ./src/spot_flex_sim/scripts/launch_gazebo_vnc.sh
 ```
 
-The wrapper opens Gazebo and RViz on the same noVNC desktop by default. To disable RViz:
+The wrapper opens Gazebo and RViz on the same desktop by default. To disable RViz:
 
 ```bash
 ./src/spot_flex_sim/scripts/launch_gazebo_vnc.sh rviz:=false
 ```
 
-To stop the virtual display services:
+Stop the virtual display:
 
 ```bash
 ./src/spot_flex_sim/scripts/stop_virtual_display.sh
 ```
 
-This is optional. You can still run:
+### MoveIt Spot Arm
 
-- headless Gazebo for navigation and testing on the laptop
-- native Gazebo / RViz on an Ubuntu desktop if you want direct local rendering
+This launch starts a mock Spot arm with `ros2_control`, `move_group`, and RViz.
+
+If using noVNC, start the virtual display first:
+
+```bash
+cd /repo/workspace
+./src/spot_flex_sim/scripts/start_virtual_display.sh
+source ./src/spot_flex_sim/scripts/virtual_display_env.sh
+```
+
+Build and launch:
+
+```bash
+cd /repo/workspace
+rosdep install --from-paths src --ignore-src -r -y --skip-keys "bosdyn bosdyn_msgs spot_wrapper bosdyn_cmake_module"
+colcon build --symlink-install --packages-select spot_flex_moveit spot_flex_control
+source /opt/ros/humble/setup.bash
+source /repo/workspace/install/setup.bash
+ros2 launch spot_flex_moveit spot_arm_moveit.launch.py
+```
+
+Optional second shell:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /repo/workspace/install/setup.bash
+ros2 run spot_flex_control arm_node
+```
 
 ### Camera-Based Nav2
 
@@ -167,22 +178,3 @@ If the real driver already publishes the odometry TF from `odom`/`vision` to `ba
 ## Network
 
 Spot's default IP is `192.168.80.3` on its own network.
-
-
-
-Gazebo
-cd /repo/workspace
-./src/spot_flex_sim/scripts/launch_gazebo_vnc.sh
-
-Slam cd /repo/workspace
-source install/setup.bash
-ros2 launch spot_flex_nav mapping.launch.py
-
-Driving
-cd /repo/workspace
-source install/setup.bash
-ros2 run spot_flex_nav teleop_arrows
-
-Saving map
-ros2 run nav2_map_server map_saver_cli -f /repo/workspace/src/spot_flex_nav/maps/test_room
-ros2 launch spot_flex_nav navigation.launch.py map:=/repo/workspace/src/spot_flex_nav/maps/test_room.yaml

@@ -1,0 +1,51 @@
+# Configuration for ros2_control_node (the hardware controller manager).
+# Defines the actual JointTrajectoryControllers that receive trajectory commands
+# and forward them to the mock hardware.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    arm_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    gripper_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_controller:
+  ros__parameters:
+    joints:
+      - arm_sh0
+      - arm_sh1
+      - arm_el0
+      - arm_el1
+      - arm_wr0
+      - arm_wr1
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    # open_loop_control: mock hardware follows commands instantly, so we don't
+    # need to check that actual positions track commanded positions.
+    open_loop_control: true
+
+gripper_controller:
+  ros__parameters:
+    joints:
+      - arm_f1x
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    open_loop_control: true

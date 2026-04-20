@@ -1,0 +1,32 @@
+# Joint velocity limits used by AddTimeOptimalParameterization.
+# Without this file, the time parameterization step logs warnings and may produce
+# zero-duration trajectories that the JTC will reject.
+joint_limits:
+  arm_sh0:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false
+  arm_sh1:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false
+  arm_el0:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false
+  arm_el1:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false
+  arm_wr0:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false
+  arm_wr1:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false
+  arm_f1x:
+    has_velocity_limits: true
+    max_velocity: 1.5
+    has_acceleration_limits: false

@@ -68,6 +68,7 @@ RUN apt-get update -q && \
     ros-humble-pcl-ros \
     ros-humble-tf2-sensor-msgs \
     ros-humble-cv-bridge \
+    ros-humble-moveit \
     && rm -rf /var/lib/apt/lists/*
 
 # Boston Dynamics SDK version (must match spot_ros2/spot_wrapper)

@@ -15,7 +15,7 @@ class NavNode(Node):
     Wraps Spot's navigation in a nav2-compatible interface.
 
     Action server:
-        /go_to (NavigateToPose) — accepts goal poses in vision frame
+        /go_to (NavigateToPose) accepts goal poses in vision frame
     """
 
     def __init__(self):

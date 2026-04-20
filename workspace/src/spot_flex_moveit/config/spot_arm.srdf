@@ -1,0 +1,61 @@
+<?xml version="1.0"?>
+<!-- Semantic Robot Description Format for the Spot arm. -->
+<robot name="spot_arm_moveit">
+
+  <group name="spot_arm">
+    <chain base_link="body" tip_link="arm_link_wr1"/>
+  </group>
+
+  <group name="spot_gripper">
+    <joint name="arm_f1x"/>
+  </group>
+
+  <group_state name="stowed" group="spot_arm">
+    <joint name="arm_sh0" value="0.0"/>
+    <joint name="arm_sh1" value="-3.13"/>
+    <joint name="arm_el0" value="3.13"/>
+    <joint name="arm_el1" value="0.0"/>
+    <joint name="arm_wr0" value="1.57"/>
+    <joint name="arm_wr1" value="0.0"/>
+  </group_state>
+
+  <group_state name="ready" group="spot_arm">
+    <joint name="arm_sh0" value="0.0"/>
+    <joint name="arm_sh1" value="-0.9"/>
+    <joint name="arm_el0" value="1.8"/>
+    <joint name="arm_el1" value="0.0"/>
+    <joint name="arm_wr0" value="-0.9"/>
+    <joint name="arm_wr1" value="0.0"/>
+  </group_state>
+
+  <group_state name="pre_grasp" group="spot_arm">
+    <joint name="arm_sh0" value="0.0"/>
+    <joint name="arm_sh1" value="-0.5"/>
+    <joint name="arm_el0" value="2.0"/>
+    <joint name="arm_el1" value="0.0"/>
+    <joint name="arm_wr0" value="0.0"/>
+    <joint name="arm_wr1" value="0.0"/>
+  </group_state>
+
+  <group_state name="open" group="spot_gripper">
+    <joint name="arm_f1x" value="0.0"/>
+  </group_state>
+
+  <group_state name="closed" group="spot_gripper">
+    <joint name="arm_f1x" value="-1.57"/>
+  </group_state>
+
+  <end_effector name="hand" parent_link="arm_link_wr1" group="spot_gripper"/>
+
+  <disable_collisions link1="body"           link2="arm_link_sh0"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_sh0"   link2="arm_link_sh1"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_sh1"   link2="arm_link_hr0"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_hr0"   link2="arm_link_el0"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_el0"   link2="arm_link_el1"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_el1"   link2="arm_link_wr0"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_wr0"   link2="arm_link_wr1"  reason="Adjacent"/>
+  <disable_collisions link1="arm_link_wr1"   link2="arm_link_fngr" reason="Adjacent"/>
+  <disable_collisions link1="arm_link_sh0"   link2="arm_link_hr0"  reason="Never"/>
+  <disable_collisions link1="body"           link2="arm_link_sh1"  reason="Never"/>
+
+</robot>
