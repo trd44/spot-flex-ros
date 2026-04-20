@@ -3,6 +3,7 @@
 ROS 2 system for extending Boston Dynamics Spot with navigation, perception, planning, and arm control.
 
 Initial Implementation: c8455e4
+Nav2 and MoveIt implemented: d71513b
 
 ## Project Structure
 
