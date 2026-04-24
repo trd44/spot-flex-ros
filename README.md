@@ -53,6 +53,35 @@ source install/setup.bash
 # Run nodes
 ```
 
+## Perception
+
+Models are cached in the container at `/opt/spot_flex_model_cache`. The current container may also use `/repo/workspace/model_cache`.
+
+Offline tests:
+
+```bash
+cd /repo/workspace
+PYTHONPATH=/repo/workspace/src/spot_flex_perception:$PYTHONPATH python3 -m spot_flex_perception.test_owl
+PYTHONPATH=/repo/workspace/src/spot_flex_perception:$PYTHONPATH python3 -m spot_flex_perception.test_box_grasp
+PYTHONPATH=/repo/workspace/src/spot_flex_perception:$PYTHONPATH python3 -m spot_flex_perception.test_cabinet_handle
+```
+
+Action server:
+
+```bash
+cd /repo/workspace
+source install/setup.bash
+ros2 run spot_flex_perception perception_server_node
+```
+
+Action calls:
+
+```bash
+ros2 action send_goal /find_box_grasp_point spot_flex_msgs/action/FindBoxGraspPoint "{side: left}" --feedback
+ros2 action send_goal /find_cabinet_handle spot_flex_msgs/action/FindCabinetHandle "{}" --feedback
+ros2 action send_goal /find_object spot_flex_msgs/action/FindObject "{object_name: box}" --feedback
+```
+
 ### noVNC Browser GUI
 
 For macOS and container setups, the browser path is more reliable than direct X11 for Gazebo and RViz.
