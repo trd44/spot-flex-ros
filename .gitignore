@@ -36,3 +36,6 @@ CMakeLists.txt.user
 *.onnx
 
 *.pdf
+
+workspace/src/spot_flex_perception/spot_flex_perception/sdk_code
+workspace/model_cache/*

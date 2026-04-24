@@ -1,5 +1,5 @@
 # Goal
-string object_name
+string side  # "left" or "right"
 ---
 # Result
 bool found
