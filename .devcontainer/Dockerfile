@@ -94,6 +94,22 @@ COPY workspace/src/spot_ros2/spot_wrapper/requirements.txt /tmp/spot_wrapper_req
 RUN pip install --no-cache-dir -r /tmp/spot_wrapper_requirements.txt && \
     rm /tmp/spot_wrapper_requirements.txt
 
+# Perception ML dependencies and model cache.
+ENV SPOT_FLEX_MODEL_DIR=/opt/spot_flex_model_cache
+ENV HF_HOME=/opt/spot_flex_model_cache/huggingface
+ENV TRANSFORMERS_CACHE=/opt/spot_flex_model_cache/huggingface/hub
+
+RUN pip install --no-cache-dir \
+    "Pillow>=10.4,<12" \
+    torch \
+    torchvision \
+    transformers \
+    segment-anything && \
+    mkdir -p "${SPOT_FLEX_MODEL_DIR}/sam" "${HF_HOME}" && \
+    python3 -c "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor; model_id='google/owlv2-base-patch16-ensemble'; AutoProcessor.from_pretrained(model_id); AutoModelForZeroShotObjectDetection.from_pretrained(model_id)" && \
+    wget -q -O "${SPOT_FLEX_MODEL_DIR}/sam/sam_vit_b_01ec64.pth" \
+      "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
+
 # Pin setuptools version that spot_ros2 expects
 RUN pip install --no-cache-dir --force-reinstall "setuptools==59.6.0"
 
