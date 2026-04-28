@@ -14,6 +14,8 @@ MoveIt seems to work fine.
 Perception works great.
 Supervisory control appears to make the plan but the non-working nav2 is holding everything else up.
 
+My plan is to get spot's native graph nav working first for the demo, then try to get nav2 working.
+
 
 ## Project Structure
 
