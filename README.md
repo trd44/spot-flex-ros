@@ -7,6 +7,14 @@ Nav2 and MoveIt implemented: d71513b
 Perception implemented: 711dcad
 Supervisory Control implemented: 
 
+## Current State of the project
+
+Nav2 is making wonky maps.
+MoveIt seems to work fine.
+Perception works great.
+Supervisory control appears to make the plan but the non-working nav2 is holding everything else up.
+
+
 ## Project Structure
 
 ```
