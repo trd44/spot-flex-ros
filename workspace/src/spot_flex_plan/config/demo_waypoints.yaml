@@ -1,0 +1,24 @@
+frame_id: map
+dock_id: 521
+
+locations:
+  box:
+    x: 1.0
+    y: 0.0
+    yaw: 0.0
+    graphnav_waypoint: box
+  cabinet:
+    x: 2.5
+    y: 1.0
+    yaw: 1.5708
+    graphnav_waypoint: cabinet
+  dropoff:
+    x: 3.5
+    y: 0.0
+    yaw: 0.0
+    graphnav_waypoint: dropoff
+  dock:
+    x: 0.0
+    y: 0.0
+    yaw: 0.0
+    graphnav_waypoint: dock

@@ -1,9 +1,6 @@
-import os
-from glob import glob
-
 from setuptools import find_packages, setup
 
-package_name = 'spot_flex_plan'
+package_name = 'spot_flex_mocks'
 
 setup(
     name=package_name,
@@ -12,18 +9,19 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='Timothy Duggan',
     maintainer_email='timothy.duggan@tufts.edu',
-    description='Task planning and orchestration for spot_flex',
+    description='Mock action/service servers for spot_flex demo development',
     license='MIT',
     entry_points={
         'console_scripts': [
-            'conductor_node = spot_flex_plan.conductor_node:main',
+            'mock_nav_server = spot_flex_mocks.mock_nav_server:main',
+            'mock_perception_server = spot_flex_mocks.mock_perception_server:main',
+            'mock_policy_server = spot_flex_mocks.mock_policy_server:main',
+            'mock_spot_services = spot_flex_mocks.mock_spot_services:main',
         ],
     },
 )

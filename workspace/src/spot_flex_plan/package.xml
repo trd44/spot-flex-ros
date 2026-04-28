@@ -9,11 +9,16 @@
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
   <depend>spot_flex_msgs</depend>
+  <depend>spot_msgs</depend>
   <depend>nav2_msgs</depend>
 
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>yasmin</exec_depend>
+  <exec_depend>yasmin_ros</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

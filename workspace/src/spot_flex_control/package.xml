@@ -14,8 +14,8 @@
   <depend>spot_flex_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>tf2_ros</depend>
-  <depend>moveit_py</depend>
-  <depend>moveit_ros_planning_interface</depend>
+  <exec_depend condition="$SPOT_FLEX_ENABLE_MOVEIT == 1">moveit_py</exec_depend>
+  <exec_depend condition="$SPOT_FLEX_ENABLE_MOVEIT == 1">moveit_ros_planning_interface</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

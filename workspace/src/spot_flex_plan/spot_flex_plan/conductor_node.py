@@ -1,104 +1,176 @@
-"""
-Conductor node — task planning and execution
+"""Conductor: hosts /fetch_item and runs the demo FSM on each goal."""
 
-Receives high-level goals (e.g., fetch item X from cabinet Y),
-generates a plan, and executes each step by calling action servers
-on the perception, navigation, and arm control nodes.
-"""
+import math
+import os
+import threading
+import time
 
 import rclpy
-from rclpy.node import Node
-from rclpy.action import ActionServer, ActionClient
-from rclpy.callback_groups import ReentrantCallbackGroup
-
-from spot_flex_msgs.action import FetchItem, FindObject, ExecutePolicy
+import yaml
+from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
-from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionServer
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
+from rclpy.node import Node
 
-from spot_flex_plan.task_planner import TaskPlanner, ActionType
+from spot_flex_msgs.action import FetchItem
+from yasmin import Blackboard
+
+from spot_flex_plan.demo_fsm import build_demo_fsm
+
+
+DEFAULT_WAYPOINTS = 'demo_waypoints.yaml'
+POLL_HZ = 10.0
+
+
+def _pose_from_xy_yaw(x, y, yaw, frame='map'):
+    pose = PoseStamped()
+    pose.header.frame_id = frame
+    pose.pose.position.x = float(x)
+    pose.pose.position.y = float(y)
+    pose.pose.orientation.z = math.sin(yaw / 2.0)
+    pose.pose.orientation.w = math.cos(yaw / 2.0)
+    return pose
+
+
+def _entry(data, key):
+    locations = data.get('locations', {}) or {}
+    aliases = (key,)
+    if key == 'table':
+        aliases = ('table', 'dropoff', 'drop_off')
+
+    for alias in aliases:
+        if alias in locations:
+            return locations[alias] or {}
+        if alias in data:
+            return data[alias] or {}
+    return {}
+
+
+def _pose_entry(entry):
+    pose = entry.get('pose', entry)
+    position = pose.get('position', pose)
+    orientation = pose.get('orientation', {})
+    return position, orientation
+
+
+def _pose_from_entry(entry, default_frame):
+    position, orientation = _pose_entry(entry)
+    frame = entry.get('frame_id', default_frame)
+    if orientation:
+        pose = PoseStamped()
+        pose.header.frame_id = frame
+        pose.pose.position.x = float(position.get('x', 0.0))
+        pose.pose.position.y = float(position.get('y', 0.0))
+        pose.pose.position.z = float(position.get('z', 0.0))
+        pose.pose.orientation.x = float(orientation.get('x', 0.0))
+        pose.pose.orientation.y = float(orientation.get('y', 0.0))
+        pose.pose.orientation.z = float(orientation.get('z', 0.0))
+        pose.pose.orientation.w = float(orientation.get('w', 1.0))
+        return pose
+
+    return _pose_from_xy_yaw(
+        position.get('x', 0.0), position.get('y', 0.0),
+        entry.get('yaw', 0.0), frame)
+
+
+def _load_waypoints(path: str, blackboard: Blackboard) -> None:
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    frame = data.get('frame_id', 'map')
+    for key in ('box', 'cabinet', 'table', 'dock'):
+        wp = _entry(data, key)
+        blackboard[f'{key}_pose'] = _pose_from_entry(wp, frame)
+    blackboard['dock_id'] = int(data.get('dock_id', 0))
 
 
 class ConductorNode(Node):
-    """
-    Central orchestrator that coordinates all subsystems.
-    """
-
     def __init__(self):
         super().__init__('conductor_node')
         self.cb_group = ReentrantCallbackGroup()
 
-        # Task planner (swappable — replace internals without changing this node)
-        self.planner = TaskPlanner()
+        self.declare_parameter(
+            'waypoints_file',
+            os.path.join(get_package_share_directory('spot_flex_plan'),
+                         'config', DEFAULT_WAYPOINTS))
 
-        # Current state tracking
-        self.current_step_index = 0
-        self.current_plan = []
-        self.robot_state = {
-            'arm_stowed': True,
-            'holding_item': None,
-            'current_pose': None,
-        }
-
-        # --- Action server: receives goals from UI ---
         self._fetch_server = ActionServer(
-            self,
-            FetchItem,
-            'fetch_item',
-            self._execute_fetch,
+            self, FetchItem, 'fetch_item',
+            execute_callback=self._execute_fetch,
             callback_group=self.cb_group,
         )
+        self.get_logger().info('conductor_node ready')
 
-        # --- Action clients: calls out to other subsystems ---
-        self._nav_client = ActionClient(
-            self, NavigateToPose, 'go_to',
-            callback_group=self.cb_group,
-        )
-        self._find_object_client = ActionClient(
-            self, FindObject, 'find_object',
-            callback_group=self.cb_group,
-        )
-        self._policy_client = ActionClient(
-            self, ExecutePolicy, 'execute_policy',
-            callback_group=self.cb_group,
-        )
+    def _execute_fetch(self, goal_handle):
+        blackboard = Blackboard()
+        blackboard['target_item'] = goal_handle.request.item_name or 'item'
 
-        self.get_logger().info('Conductor node started')
+        try:
+            _load_waypoints(self.get_parameter('waypoints_file').value, blackboard)
+        except Exception as e:
+            self.get_logger().error(f'failed to load waypoints: {e}')
+            goal_handle.abort()
+            return FetchItem.Result(success=False, message=f'waypoint load failed: {e}')
 
-    async def _execute_fetch(self, goal_handle):
-        """Execute a FetchItem goal by planning and stepping through actions."""
-        pass
+        sm = build_demo_fsm()
+        self.get_logger().info(f'starting FSM for item={blackboard["target_item"]}')
 
-    async def _execute_step(self, step):
-        """
-        """
-        pass
+        result = {}
+        def run():
+            try:
+                result['outcome'] = sm(blackboard)
+            except Exception as e:
+                result['error'] = str(e)
 
-    async def _do_navigate(self, step):
-        """Send a navigation goal to the nav node."""
-        pass
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
 
-    async def _do_perceive(self, step):
-        """Send a perception request to find an object or feature."""
-        pass
+        last_state = None
+        period = 1.0 / POLL_HZ
+        while worker.is_alive():
+            if goal_handle.is_cancel_requested:
+                self.get_logger().info('cancel requested; canceling FSM')
+                try:
+                    sm.cancel_state()
+                except Exception:
+                    pass
+                worker.join(timeout=5.0)
+                goal_handle.canceled()
+                return FetchItem.Result(success=False, message='canceled')
 
-    async def _do_policy(self, step):
-        """Execute a learned policy (cabinet open, push, etc.)."""
-        pass
+            current = sm.get_current_state() if hasattr(sm, 'get_current_state') else None
+            if current and current != last_state:
+                last_state = current
+                fb = FetchItem.Feedback()
+                fb.current_step = current
+                fb.progress = 0.0
+                goal_handle.publish_feedback(fb)
+                self.get_logger().info(f'state -> {current}')
 
-    async def _do_grasp(self, step):
-        """Grasp the target object."""
-        pass
+            time.sleep(period)
 
-    async def _do_place(self, step):
-        """Place the held object at the target location."""
-        pass
+        if 'error' in result:
+            self.get_logger().error(f'FSM crashed: {result["error"]}')
+            goal_handle.abort()
+            return FetchItem.Result(success=False, message=result['error'])
+
+        outcome = result.get('outcome', 'ABORTED')
+        if outcome == 'DONE':
+            goal_handle.succeed()
+            return FetchItem.Result(success=True, message='DONE')
+
+        goal_handle.abort()
+        return FetchItem.Result(success=False, message=outcome)
 
 
-def main(args=None):
-    rclpy.init(args=args)
+def main():
+    rclpy.init()
     node = ConductorNode()
+    executor = MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:

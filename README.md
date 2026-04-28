@@ -5,6 +5,7 @@ ROS 2 system for extending Boston Dynamics Spot with navigation, perception, pla
 Initial Implementation: c8455e4
 Nav2 and MoveIt implemented: d71513b
 Perception implemented: 711dcad
+Supervisory Control implemented: 
 
 ## Project Structure
 
@@ -205,6 +206,15 @@ ros2 launch spot_flex_nav mapping.launch.py \
 
 If the real driver already publishes the odometry TF from `odom`/`vision` to `base_link`, launch with
 `start_odom_tf:=false` and set `odom_frame` in the Nav2 config to match the driver frame.
+
+## spot_flex_plan
+
+Mock
+```bash
+ros2 launch spot_flex_plan demo.launch.py.  # Terminal 1
+
+ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem   "{item_name: 'can', location: 'cabinet'}" --feedback  # Terminal 2
+```
 
 ## Network
 

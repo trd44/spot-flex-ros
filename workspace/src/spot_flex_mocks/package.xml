@@ -1,27 +1,20 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>spot_flex_nav</name>
+  <name>spot_flex_mocks</name>
   <version>0.1.0</version>
-  <description>Camera-based Nav2 integration, mapping, and named locations for Spot Flex.</description>
+  <description>Mock action/service servers for spot_flex demo development without hardware</description>
   <maintainer email="timothy.duggan@tufts.edu">Timothy Duggan</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
-
   <depend>rclpy</depend>
+  <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
-  <depend>nav_msgs</depend>
-  <depend>sensor_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>spot_msgs</depend>
-  <depend>tf2_ros</depend>
-  <depend>launch</depend>
-  <depend>launch_ros</depend>
-  <depend>nav2_bringup</depend>
-  <depend>slam_toolbox</depend>
-  <depend>python3-numpy</depend>
-  <depend>python3-yaml</depend>
+  <depend>spot_flex_msgs</depend>
+
+  <exec_depend>ros2launch</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

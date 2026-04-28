@@ -8,7 +8,6 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 
 from geometry_msgs.msg import PoseStamped
 from std_srvs.srv import Trigger
-from moveit.planning import MoveItPy
 
 ARM_GROUP = 'spot_arm'
 GRIPPER_GROUP = 'spot_gripper'
@@ -21,6 +20,8 @@ class ArmNode(Node):
         self.cb_group = ReentrantCallbackGroup()
 
         self.get_logger().info('Connecting to MoveIt move_group...')
+        from moveit.planning import MoveItPy
+
         self._moveit = MoveItPy(node_name='arm_node_moveit_py')
         self._arm = self._moveit.get_planning_component(ARM_GROUP)
         self._gripper = self._moveit.get_planning_component(GRIPPER_GROUP)

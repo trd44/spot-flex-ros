@@ -30,6 +30,7 @@ setup(
             'odom_to_tf = spot_flex_nav.odom_to_tf_node:main',
             'teleop_arrows = spot_flex_nav.teleop_arrows:main',
             'tag_location = spot_flex_nav.tag_location:main',
+            'tag_graphnav_location = spot_flex_nav.tag_graphnav_location:main',
             'go_to_location = spot_flex_nav.go_to_location:main',
         ],
     },

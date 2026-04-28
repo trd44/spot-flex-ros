@@ -85,7 +85,7 @@ Expand the Boston Dynamics Spot robot's capabilities to execute multi-step plans
 - **Functions:** `_execute_step()` dispatches each ActionStep to the right subsystem, `_do_navigate()`, `_do_perceive()`, `_do_policy()`, `_do_grasp()`, `_do_place()`
 
 #### Task Planning
-The conductor node uses a `TaskPlanner` class to generate action sequences for high-level goals. Right now this will be a simple state machine but can be upgraded to a behavior tree (py_trees) or pddl based system (PlanSys2).
+The conductor builds a YASMIN finite state machine (`spot_flex_plan/demo_fsm.py`) per goal. Each state wraps an action client or service client (nav, perception, policy, spot driver). Waypoints come from `spot_flex_plan/config/demo_waypoints.yaml`. The `spot_flex_mocks` package provides drop-in mock servers so the FSM runs end-to-end without hardware (`ros2 launch spot_flex_plan demo.launch.py`). The FSM can later be swapped for a behavior tree or PDDL planner.
 
 ##### Example: Fetch Item from Cabinet
 
