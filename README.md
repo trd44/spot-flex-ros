@@ -168,6 +168,84 @@ source /repo/workspace/install/setup.bash
 ros2 run spot_flex_control arm_node
 ```
 
+### GraphNav Mapping
+
+For hardware demos, prefer Spot's native GraphNav over the camera-based Nav2 map. The workflow that worked best was:
+record with the controller/tablet, download the active GraphNav map to the container, then use ROS to localize and
+navigate to named waypoints.
+
+Record a small connected graph for the demo locations. Add named waypoints such as `box`, `cabinet`, `table`, and
+`dock`. After recording, download the currently loaded GraphNav map from Spot:
+
+```bash
+cd /repo/workspace
+colcon build --symlink-install --packages-select spot_flex_nav
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 run spot_flex_nav graphnav_download_map \
+  --output /repo/workspace/maps/demo.walk \
+  --force
+```
+
+The saved map folder should look like this:
+
+```text
+demo.walk/
+  graph
+  waypoint_snapshots/
+  edge_snapshots/
+```
+
+After the map is saved, start the Spot driver in one shell:
+
+```bash
+cd /repo/workspace
+bash ./launch_spot.sh
+```
+
+In a second shell, list/upload the map and localize:
+
+```bash
+cd /repo/workspace
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 service call /spot/list_graph spot_msgs/srv/ListGraph \
+  "{upload_filepath: '/repo/workspace/maps/demo.walk'}"
+
+ros2 service call /spot/graph_nav_set_localization spot_msgs/srv/GraphNavSetLocalization \
+  "{method: 'fiducial', waypoint_id: ''}"
+```
+
+If no fiducial is visible, stand Spot near a known waypoint and localize by waypoint:
+
+```bash
+ros2 service call /spot/graph_nav_set_localization spot_msgs/srv/GraphNavSetLocalization \
+  "{method: 'waypoint', waypoint_id: 'dock'}"
+```
+
+Simple navigation sequence:
+
+```bash
+ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
+  "{waypoint_id: 'box'}" --feedback
+
+ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
+  "{waypoint_id: 'cabinet'}" --feedback
+
+ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
+  "{waypoint_id: 'table'}" --feedback
+
+ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
+  "{waypoint_id: 'dock'}" --feedback
+
+ros2 service call /spot/dock spot_msgs/srv/Dock "{dock_id: 521}"
+```
+
+Use a full waypoint id, short waypoint id, or unique waypoint annotation name for `waypoint_id`. The dock service uses
+the numeric dock id, not the GraphNav waypoint name.
+
 ### Camera-Based Nav2
 
 The `spot_flex_nav` package provides the no-lidar navigation path. It converts a depth camera stream into a synthetic

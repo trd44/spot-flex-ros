@@ -32,6 +32,7 @@ setup(
             'tag_location = spot_flex_nav.tag_location:main',
             'tag_graphnav_location = spot_flex_nav.tag_graphnav_location:main',
             'go_to_location = spot_flex_nav.go_to_location:main',
+            'graphnav_download_map = spot_flex_nav.graphnav_download_map:main',
         ],
     },
 )
