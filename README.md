@@ -5,7 +5,7 @@ ROS 2 system for extending Boston Dynamics Spot with navigation, perception, pla
 Initial Implementation: c8455e4
 Nav2 and MoveIt implemented: d71513b
 Perception implemented: 711dcad
-Supervisory Control implemented: 6570dd3
+Supervisory Control implemented: ee73f85
 
 ## Current State of the project
 
