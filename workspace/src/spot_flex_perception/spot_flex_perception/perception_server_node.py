@@ -55,6 +55,11 @@ class PerceptionServerNode(Node):
         self.declare_parameter('rgb_topic', '/spot/camera/hand/image')
         self.declare_parameter('open_gripper_before_box_image', False)
         self.declare_parameter('require_box_gripper_open', True)
+        self.declare_parameter('open_gripper_before_handle_image', True)
+        self.declare_parameter('require_handle_gripper_open', False)
+        self.declare_parameter('open_gripper_before_object_image', True)
+        self.declare_parameter('require_object_gripper_open', False)
+        self.declare_parameter('grasp_object_after_detection', True)
         self.declare_parameter('open_gripper_service', '/spot/open_gripper')
         self.declare_parameter('gripper_settle_sec', 1.5)
         self.declare_parameter('box_detection_retry_count', 2)
@@ -250,6 +255,98 @@ class PerceptionServerNode(Node):
         )
         return True, image_cutoff
 
+    async def _open_gripper_for_handle_image(self, goal_handle):
+        if not self.get_parameter('open_gripper_before_handle_image').value:
+            return True, self.get_clock().now()
+
+        feedback = FindCabinetHandle.Feedback()
+        feedback.status = 'opening gripper before handle image'
+        goal_handle.publish_feedback(feedback)
+
+        service_name = self.get_parameter('open_gripper_service').value
+        if not self._open_gripper_client.service_is_ready():
+            self.get_logger().info(f"Waiting for service '{service_name}'")
+            if not self._open_gripper_client.wait_for_service(timeout_sec=5.0):
+                self.get_logger().error(f"Service '{service_name}' is not available")
+                return (
+                    not self.get_parameter('require_handle_gripper_open').value,
+                    self.get_clock().now(),
+                )
+
+        try:
+            response = await self._open_gripper_client.call_async(Trigger.Request())
+        except Exception as exc:  # pragma: no cover - defensive ROS service boundary
+            self.get_logger().error(f"Failed to call '{service_name}': {exc}")
+            return (
+                not self.get_parameter('require_handle_gripper_open').value,
+                self.get_clock().now(),
+            )
+
+        if not response.success:
+            self.get_logger().error(
+                f"Service '{service_name}' reported failure: {response.message}"
+            )
+            return (
+                not self.get_parameter('require_handle_gripper_open').value,
+                self.get_clock().now(),
+            )
+
+        settle_sec = float(self.get_parameter('gripper_settle_sec').value)
+        if settle_sec > 0.0:
+            await self._sleep(settle_sec)
+        image_cutoff = self.get_clock().now()
+        self.get_logger().info(
+            'Gripper open command complete; waiting for handle image after '
+            f'{image_cutoff.nanoseconds}'
+        )
+        return True, image_cutoff
+
+    async def _open_gripper_for_object_image(self, goal_handle, object_name):
+        if not self.get_parameter('open_gripper_before_object_image').value:
+            return True, self.get_clock().now()
+
+        feedback = FindObject.Feedback()
+        feedback.status = f'opening gripper before {object_name} image'
+        goal_handle.publish_feedback(feedback)
+
+        service_name = self.get_parameter('open_gripper_service').value
+        if not self._open_gripper_client.service_is_ready():
+            self.get_logger().info(f"Waiting for service '{service_name}'")
+            if not self._open_gripper_client.wait_for_service(timeout_sec=5.0):
+                self.get_logger().error(f"Service '{service_name}' is not available")
+                return (
+                    not self.get_parameter('require_object_gripper_open').value,
+                    self.get_clock().now(),
+                )
+
+        try:
+            response = await self._open_gripper_client.call_async(Trigger.Request())
+        except Exception as exc:  # pragma: no cover - defensive ROS service boundary
+            self.get_logger().error(f"Failed to call '{service_name}': {exc}")
+            return (
+                not self.get_parameter('require_object_gripper_open').value,
+                self.get_clock().now(),
+            )
+
+        if not response.success:
+            self.get_logger().error(
+                f"Service '{service_name}' reported failure: {response.message}"
+            )
+            return (
+                not self.get_parameter('require_object_gripper_open').value,
+                self.get_clock().now(),
+            )
+
+        settle_sec = float(self.get_parameter('gripper_settle_sec').value)
+        if settle_sec > 0.0:
+            await self._sleep(settle_sec)
+        image_cutoff = self.get_clock().now()
+        self.get_logger().info(
+            'Gripper open command complete; waiting for object image after '
+            f'{image_cutoff.nanoseconds}'
+        )
+        return True, image_cutoff
+
     async def _grasp_at_pixel(self, pixel, enabled_param: str, label: str) -> tuple[bool, str]:
         if not self.get_parameter(enabled_param).value:
             return True, 'grasp disabled'
@@ -282,26 +379,121 @@ class PerceptionServerNode(Node):
     async def _grasp_handle_at_pixel(self, pixel) -> tuple[bool, str]:
         return await self._grasp_at_pixel(pixel, 'grasp_handle_after_detection', 'handle')
 
-    def _save_cabinet_handle_debug_image(self, image_rgb, handle_result):
+    async def _grasp_object_at_pixel(self, pixel) -> tuple[bool, str]:
+        return await self._grasp_at_pixel(pixel, 'grasp_object_after_detection', 'object')
+
+    def _cabinet_handle_debug_stem(self, image_received_time=None):
+        stamp = self.get_clock().now().nanoseconds
+        if image_received_time is not None:
+            stamp = image_received_time.nanoseconds
+        return f'cabinet_handle_{stamp}'
+
+    def _save_cabinet_handle_capture_image(self, image_rgb, image_received_time=None):
+        if not self.get_parameter('save_debug_images').value:
+            return None
+
+        try:
+            output_dir = Path(self.get_parameter('debug_image_dir').value)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            stem = self._cabinet_handle_debug_stem(image_received_time)
+            raw_path = output_dir / f'{stem}_captured_raw.jpg'
+            cv2.imwrite(str(raw_path), cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR))
+            self.get_logger().info(f'Saved captured cabinet handle image: {raw_path}')
+            return stem
+        except Exception as exc:
+            self.get_logger().warning(f'Failed to save captured cabinet handle image: {exc}')
+            return None
+
+    def _save_cabinet_handle_debug_image(self, image_rgb, handle_result, capture_stem=None):
         if not self.get_parameter('save_debug_images').value:
             return
 
         try:
             output_dir = Path(self.get_parameter('debug_image_dir').value)
             output_dir.mkdir(parents=True, exist_ok=True)
-            stamp = self.get_clock().now().nanoseconds
+            stem = capture_stem or self._cabinet_handle_debug_stem()
             if handle_result is None:
-                path = output_dir / f'cabinet_handle_{stamp}_no_detection.jpg'
+                path = output_dir / f'{stem}_no_detection.jpg'
                 cv2.imwrite(str(path), cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR))
                 self.get_logger().info(f'Saved cabinet handle image: {path}')
                 return
 
             x, y = handle_result.center_pixel
-            path = output_dir / f'cabinet_handle_{stamp}_{x}_{y}_overlay.jpg'
+            path = output_dir / f'{stem}_{x}_{y}_overlay.jpg'
             draw_cabinet_handle_result(image_rgb, handle_result, str(path))
             self.get_logger().info(f'Saved cabinet handle overlay: {path}')
         except Exception as exc:
             self.get_logger().warning(f'Failed to save cabinet handle debug image: {exc}')
+
+    def _object_debug_stem(self, object_name, image_received_time=None):
+        stamp = self.get_clock().now().nanoseconds
+        if image_received_time is not None:
+            stamp = image_received_time.nanoseconds
+        safe_name = ''.join(
+            char if char.isalnum() or char in ('-', '_') else '_'
+            for char in object_name.strip().lower()
+        ) or 'object'
+        return f'object_{safe_name}_{stamp}'
+
+    def _save_object_capture_image(self, image_rgb, object_name, image_received_time=None):
+        if not self.get_parameter('save_debug_images').value:
+            return None
+
+        try:
+            output_dir = Path(self.get_parameter('debug_image_dir').value)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            stem = self._object_debug_stem(object_name, image_received_time)
+            raw_path = output_dir / f'{stem}_captured_raw.jpg'
+            cv2.imwrite(str(raw_path), cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR))
+            self.get_logger().info(f'Saved captured object image: {raw_path}')
+            return stem
+        except Exception as exc:
+            self.get_logger().warning(f'Failed to save captured object image: {exc}')
+            return None
+
+    def _save_object_detection_overlay(self, image_rgb, object_name, detection, capture_stem=None):
+        if not self.get_parameter('save_debug_images').value:
+            return
+
+        try:
+            output_dir = Path(self.get_parameter('debug_image_dir').value)
+            output_dir.mkdir(parents=True, exist_ok=True)
+            stem = capture_stem or self._object_debug_stem(object_name)
+            image_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+
+            if detection is None:
+                path = output_dir / f'{stem}_no_detection.jpg'
+                cv2.imwrite(str(path), image_bgr)
+                self.get_logger().info(f'Saved no-detection object image: {path}')
+                return
+
+            x1, y1, x2, y2 = detection.bbox
+            cx, cy = detection.center_pixel
+            cv2.rectangle(image_bgr, (x1, y1), (x2, y2), (0, 255, 255), 2)
+            cv2.drawMarker(
+                image_bgr,
+                (cx, cy),
+                (0, 0, 255),
+                markerType=cv2.MARKER_CROSS,
+                markerSize=18,
+                thickness=2,
+            )
+            label = f'{detection.label} {detection.confidence:.2f}'
+            cv2.putText(
+                image_bgr,
+                label,
+                (x1, max(0, y1 - 8)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.55,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA,
+            )
+            path = output_dir / f'{stem}_{cx}_{cy}_overlay.jpg'
+            cv2.imwrite(str(path), image_bgr)
+            self.get_logger().info(f'Saved object detection overlay: {path}')
+        except Exception as exc:
+            self.get_logger().warning(f'Failed to save object detection overlay: {exc}')
 
     @staticmethod
     def _set_pixel_result(result, found, pixel=None):
@@ -401,13 +593,32 @@ class PerceptionServerNode(Node):
         goal_handle.publish_feedback(feedback)
 
         result = FindCabinetHandle.Result()
-        image_rgb, _ = self._get_image_rgb('cabinet_test_image_path')
-        if image_rgb is None:
+
+        gripper_open, image_time_cutoff = await self._open_gripper_for_handle_image(goal_handle)
+        if not gripper_open:
             goal_handle.abort()
             return self._set_pixel_result(result, False)
 
+        feedback.status = 'capturing cabinet handle image'
+        goal_handle.publish_feedback(feedback)
+        image_rgb, image_received_time = await self._wait_for_image_rgb(
+            'cabinet_test_image_path',
+            image_time_cutoff,
+        )
+        if image_rgb is None:
+            goal_handle.abort()
+            return self._set_pixel_result(result, False)
+        capture_stem = self._save_cabinet_handle_capture_image(image_rgb, image_received_time)
+        if image_received_time is not None:
+            self.get_logger().info(
+                'Using fresh cabinet handle image received at '
+                f'{image_received_time.nanoseconds}'
+            )
+
+        feedback.status = 'detecting cabinet handle'
+        goal_handle.publish_feedback(feedback)
         handle_result = self.cabinet_handle_detector.detect(image_rgb)
-        self._save_cabinet_handle_debug_image(image_rgb, handle_result)
+        self._save_cabinet_handle_debug_image(image_rgb, handle_result, capture_stem)
         if handle_result is None:
             goal_handle.abort()
             return self._set_pixel_result(result, False)
@@ -437,15 +648,59 @@ class PerceptionServerNode(Node):
             goal_handle.abort()
             return self._set_pixel_result(result, False)
 
-        image_rgb, _ = self._get_image_rgb('object_test_image_path')
-        if image_rgb is None:
+        gripper_open, image_time_cutoff = await self._open_gripper_for_object_image(
+            goal_handle,
+            object_name,
+        )
+        if not gripper_open:
             goal_handle.abort()
             return self._set_pixel_result(result, False)
 
-        detection = self.owl_detector.best_detection(image_rgb, [object_name])
+        feedback.status = f'capturing {object_name} image'
+        goal_handle.publish_feedback(feedback)
+        image_rgb, image_received_time = await self._wait_for_image_rgb(
+            'object_test_image_path',
+            image_time_cutoff,
+        )
+        if image_rgb is None:
+            goal_handle.abort()
+            return self._set_pixel_result(result, False)
+        capture_stem = self._save_object_capture_image(
+            image_rgb,
+            object_name,
+            image_received_time,
+        )
+        if image_received_time is not None:
+            self.get_logger().info(
+                'Using fresh object image received at '
+                f'{image_received_time.nanoseconds}'
+            )
+
+        feedback.status = f'detecting {object_name}'
+        goal_handle.publish_feedback(feedback)
+        try:
+            detection = self.owl_detector.best_detection(image_rgb, [object_name])
+        except Exception as exc:
+            self.get_logger().error(f'Object detection failed: {exc}')
+            goal_handle.abort()
+            return self._set_pixel_result(result, False)
+        self._save_object_detection_overlay(image_rgb, object_name, detection, capture_stem)
         if detection is None:
             goal_handle.abort()
             return self._set_pixel_result(result, False)
+        self.get_logger().info(
+            f'Object found at ({detection.center_pixel[0]}, {detection.center_pixel[1]}) '
+            f'from {detection.label} {detection.confidence:.2f}'
+        )
+
+        feedback.status = f'grasping {object_name}'
+        goal_handle.publish_feedback(feedback)
+        grasp_success, grasp_message = await self._grasp_object_at_pixel(detection.center_pixel)
+        if not grasp_success:
+            self.get_logger().error(f'Object grasp failed: {grasp_message}')
+            goal_handle.abort()
+            return self._set_pixel_result(result, False, detection.center_pixel)
+        self.get_logger().info(f'Object grasp succeeded: {grasp_message}')
 
         goal_handle.succeed()
         return self._set_pixel_result(result, True, detection.center_pixel)

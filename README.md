@@ -307,3 +307,26 @@ ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem   "{item_name:
 ## Network
 
 Spot's default IP is `192.168.80.3` on its own network.
+
+Terminal 1
+bash /repo/workspace/launch_spot.sh
+
+Terminal 2
+ros2 launch spot_flex_plan hardware_demo.launch.py
+
+Termianl 3
+
+Full demo:
+ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem   "{item_name: 'soda can'}" --feedback
+
+Start with box pushed out of the way
+ros2 action send_goal /fetch_from_cabinet spot_flex_msgs/action/FetchItem "{item_name: 'soda can'}" --feedback
+
+Start with cabinet open
+ros2 action send_goal /fetch_from_open_cabinet spot_flex_msgs/action/FetchItem "{item_name: 'can'}" --feedback
+
+
+spot-estop
+spot-dock
+spot-interrupt
+spot-return-dock

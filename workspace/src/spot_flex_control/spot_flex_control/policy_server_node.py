@@ -8,8 +8,9 @@ import math
 import time
 
 import rclpy
-from rclpy.action import ActionServer
+from rclpy.action import ActionClient, ActionServer
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.duration import Duration
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.task import Future
@@ -18,6 +19,7 @@ from geometry_msgs.msg import PoseStamped, Twist
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
 from spot_flex_msgs.action import ExecutePolicy
+from spot_msgs.action import Trajectory
 from spot_flex_msgs.srv import (
     EstimateReactiveForce,
     GetHandPose,
@@ -215,6 +217,12 @@ class PolicyServerNode(Node):
             str(self.get_parameter('arm_pose_topic').value),
             10,
         )
+        self._trajectory_client = ActionClient(
+            self,
+            Trajectory,
+            str(self.get_parameter('place_trajectory_action').value),
+            callback_group=self.cb_group,
+        )
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, self)
         self._sleep_timers = set()
@@ -232,9 +240,23 @@ class PolicyServerNode(Node):
         self.declare_parameter('arm_pose_topic', '/spot/arm_pose_commands')
         self.declare_parameter('vision_frame', 'spot/vision')
         self.declare_parameter('hand_frame', 'spot/hand')
+        self.declare_parameter('body_frame', 'spot/body')
+        self.declare_parameter('arm_pose_frame', 'vision')
         self.declare_parameter('push_relevel_z', True)
         self.declare_parameter('push_pre_probe_lower_m', 0.2)
         self.declare_parameter('push_arm_pose_settle_sec', 1.5)
+        self.declare_parameter('flex_place_flow', True)
+        self.declare_parameter('place_pre_trigger', '')
+        self.declare_parameter('place_height_m', 0.762)
+        self.declare_parameter('place_forward_m', 0.5)
+        self.declare_parameter('place_hand_forward_m', 0.25)
+        self.declare_parameter('place_forward_duration_sec', 4.0)
+        self.declare_parameter('place_body_approach_mode', 'trajectory')
+        self.declare_parameter('place_trajectory_action', '/spot/trajectory')
+        self.declare_parameter('place_disable_obstacle_avoidance', True)
+        self.declare_parameter('place_lower_m', 0.23)
+        self.declare_parameter('place_impedance_settle_sec', 2.0)
+        self.declare_parameter('place_release_settle_sec', 0.5)
 
         self.declare_parameter('push_speed_mps', 0.12)
         self.declare_parameter('push_lateral_speed_mps', 0.0)
@@ -284,6 +306,26 @@ class PolicyServerNode(Node):
         self.declare_parameter('revolute_yaw_rate_radps', 0.18)
         self.declare_parameter('revolute_duration_sec', 4.0)
 
+        self.declare_parameter('flex_revolute_flow', True)
+        self.declare_parameter('revolute_probe_step_m', 0.05)
+        self.declare_parameter('revolute_probe_max_steps', 30)
+        self.declare_parameter('revolute_success_distance_m', 0.05)
+        self.declare_parameter('revolute_deviation_tolerance_m', 0.20)
+        self.declare_parameter('revolute_probe_min_steps', 5)
+        self.declare_parameter('revolute_probe_phi_max_rad', math.pi / 4.0)
+        self.declare_parameter('revolute_probe_phi_min_rad', 0.0)
+        self.declare_parameter('revolute_probe_confidence_thresh', 0.8)
+        self.declare_parameter('revolute_probe_initial_dir_x', -1.0)
+        self.declare_parameter('revolute_probe_initial_dir_y', 0.0)
+        self.declare_parameter('revolute_probe_initial_dir_frame', 'body')
+        self.declare_parameter('revolute_probe_settle_sec', 2.0)
+        self.declare_parameter('revolute_force_revolute', True)
+        self.declare_parameter('revolute_success_angle_deg', 75.0)
+        self.declare_parameter('revolute_accept_angle_deg', 60.0)
+        self.declare_parameter('revolute_arc_points', 60)
+        self.declare_parameter('revolute_arc_direction', 'auto')
+        self.declare_parameter('revolute_invert_action_x', True)
+
         self.declare_parameter('prismatic_speed_mps', 0.08)
         self.declare_parameter('prismatic_duration_sec', 3.0)
         self.declare_parameter('prismatic_axis_xy', '1.0,0.0')
@@ -306,7 +348,7 @@ class PolicyServerNode(Node):
         self.declare_parameter('position_for_grasp_triggers', 'arm_unstow')
         self.declare_parameter('grasp_triggers', 'close_gripper,arm_carry')
         self.declare_parameter('place_triggers', 'open_gripper')
-        self.declare_parameter('revolute_pre_triggers', 'arm_unstow')
+        self.declare_parameter('revolute_pre_triggers', '')
         self.declare_parameter('revolute_post_triggers', '')
         self.declare_parameter('prismatic_pre_triggers', 'arm_unstow')
         self.declare_parameter('prismatic_post_triggers', '')
@@ -363,6 +405,22 @@ class PolicyServerNode(Node):
                     goal_handle.abort()
                 return ExecutePolicy.Result(success=success, message=message)
 
+            if self._is_revolute_policy(policy) and _as_bool(self.get_parameter('flex_revolute_flow').value):
+                success, message = await self._execute_revolute_flow(goal_handle)
+                if success:
+                    goal_handle.succeed()
+                else:
+                    goal_handle.abort()
+                return ExecutePolicy.Result(success=success, message=message)
+
+            if self._is_place_policy(policy) and _as_bool(self.get_parameter('flex_place_flow').value):
+                success, message = await self._execute_place_flow(goal_handle)
+                if success:
+                    goal_handle.succeed()
+                else:
+                    goal_handle.abort()
+                return ExecutePolicy.Result(success=success, message=message)
+
             plan = self._executor.build_plan(policy)
             self.get_logger().info(
                 f'policy {policy}: {len(plan.commands)} commands, '
@@ -378,6 +436,108 @@ class PolicyServerNode(Node):
             self.get_logger().error(f'policy {policy} failed: {exc}')
             goal_handle.abort()
             return ExecutePolicy.Result(success=False, message=str(exc))
+
+    async def _execute_place_flow(self, goal_handle) -> tuple[bool, str]:
+        """Place the carried object on the table, then stow the arm."""
+        self._publish_feedback(goal_handle, 0.02, 'place: preparing hand')
+        if self._dry_run():
+            return True, 'place dry-run complete'
+
+        stow_needed = True
+        try:
+            pre_trigger = str(self.get_parameter('place_pre_trigger').value).strip()
+            if pre_trigger:
+                success, message = await self._call_trigger(pre_trigger)
+                if not success:
+                    return False, f'{pre_trigger} failed: {message}'
+
+            place_height_m = float(self.get_parameter('place_height_m').value)
+            self._publish_feedback(
+                goal_handle,
+                0.15,
+                f'place: raising hand to {place_height_m:.3f}m',
+            )
+            if not await self._move_hand_to_z(place_height_m, 'place raise'):
+                return False, 'place raise failed'
+
+            forward_m = float(self.get_parameter('place_forward_m').value)
+            forward_duration = max(
+                0.1,
+                float(self.get_parameter('place_forward_duration_sec').value),
+            )
+            if abs(forward_m) > 1e-6:
+                self._publish_feedback(
+                    goal_handle,
+                    0.35,
+                    f'place: walking forward {forward_m:.2f}m',
+                )
+                success, message = await self._run_place_body_approach(
+                    forward_m,
+                    forward_duration,
+                    goal_handle,
+                )
+                if not success:
+                    return False, message
+
+            hand_forward_m = float(self.get_parameter('place_hand_forward_m').value)
+            if abs(hand_forward_m) > 1e-6:
+                self._publish_feedback(
+                    goal_handle,
+                    0.48,
+                    f'place: moving hand forward {hand_forward_m:.2f}m',
+                )
+                if not await self._move_hand_by_body_delta(
+                    hand_forward_m,
+                    0.0,
+                    0.0,
+                    'place hand forward',
+                ):
+                    return False, 'place hand forward failed'
+
+            lower_m = max(0.0, float(self.get_parameter('place_lower_m').value))
+            if lower_m > 0.0:
+                self._publish_feedback(
+                    goal_handle,
+                    0.60,
+                    f'place: lowering hand {lower_m:.2f}m',
+                )
+                if not await self._move_hand_by_body_delta(
+                    0.0,
+                    0.0,
+                    -lower_m,
+                    'place lower',
+                ):
+                    return False, 'place lower failed'
+
+            settle_sec = float(self.get_parameter('place_impedance_settle_sec').value)
+            if settle_sec > 0.0:
+                self._publish_feedback(goal_handle, 0.72, 'place: gentle impedance settle')
+                success, message = await self._impedance_settle(duration_sec=settle_sec)
+                if not success:
+                    return False, f'place impedance settle failed: {message}'
+
+            self._publish_feedback(goal_handle, 0.82, 'place: opening gripper')
+            success, message = await self._call_trigger('open_gripper')
+            if not success:
+                return False, f'open_gripper failed: {message}'
+
+            release_settle = float(self.get_parameter('place_release_settle_sec').value)
+            if release_settle > 0.0:
+                await self._sleep(release_settle)
+
+            self._publish_feedback(goal_handle, 0.92, 'place: stowing arm')
+            success, message = await self._call_trigger('arm_stow')
+            stow_needed = False
+            if not success:
+                return False, f'arm_stow failed: {message}'
+
+            self._publish_feedback(goal_handle, 1.0, 'place complete')
+            return True, 'place complete'
+        finally:
+            self._stop_body()
+            if stow_needed:
+                self._publish_feedback(goal_handle, 0.95, 'place: stowing arm after failure')
+                await self._call_trigger('arm_stow')
 
     async def _execute_flex_push(self, goal_handle) -> tuple[bool, str]:
         """Run the FLEX push loop instead of a one-shot body velocity rollout."""
@@ -539,6 +699,264 @@ class PolicyServerNode(Node):
         self.get_logger().warning(message)
         return False, message
 
+    async def _execute_revolute_flow(self, goal_handle) -> tuple[bool, str]:
+        """Wiggle-probe + arc path-following to open a revolute joint."""
+        import numpy as np
+
+        from spot_flex_control.interactive_perception import InteractivePerception
+
+        self._publish_feedback(goal_handle, 0.02, 'open_cabinet: starting revolute flow')
+        if self._dry_run():
+            return True, 'open_cabinet dry-run complete'
+
+        perception = InteractivePerception()
+
+        try:
+            tr = await self._lookup_hand_tf()
+        except Exception as exc:
+            return False, f'TF lookup before probe failed: {exc}'
+        translation = tr.transform.translation
+        rotation = tr.transform.rotation
+        start_pos = np.array([translation.x, translation.y, translation.z], dtype=float)
+        start_quat = (rotation.x, rotation.y, rotation.z, rotation.w)
+        self.get_logger().info(f'open_cabinet: initial hand pos={start_pos.tolist()}')
+
+        step_size = float(self.get_parameter('revolute_probe_step_m').value)
+        probe_max_steps = max(1, int(self.get_parameter('revolute_probe_max_steps').value))
+        probe_min_steps = max(2, int(self.get_parameter('revolute_probe_min_steps').value))
+        phi_max = float(self.get_parameter('revolute_probe_phi_max_rad').value)
+        phi_min = float(self.get_parameter('revolute_probe_phi_min_rad').value)
+        confidence_thresh = float(self.get_parameter('revolute_probe_confidence_thresh').value)
+        probe_settle = float(self.get_parameter('revolute_probe_settle_sec').value)
+        target_angle_deg = float(self.get_parameter('revolute_success_angle_deg').value)
+        accept_angle_deg = float(self.get_parameter('revolute_accept_angle_deg').value)
+        accept_angle_deg = min(accept_angle_deg, target_angle_deg)
+        success_distance = float(self.get_parameter('revolute_success_distance_m').value)
+        deviation_tolerance = float(self.get_parameter('revolute_deviation_tolerance_m').value)
+        init_dx = float(self.get_parameter('revolute_probe_initial_dir_x').value)
+        init_dy = float(self.get_parameter('revolute_probe_initial_dir_y').value)
+        init_frame = str(self.get_parameter('revolute_probe_initial_dir_frame').value).strip().lower()
+        eps = 1e-6
+
+        theta = np.array([init_dx, init_dy], dtype=float)
+        theta_norm = float(np.linalg.norm(theta))
+        if theta_norm < eps:
+            return False, 'revolute_probe_initial_dir must be non-zero'
+        theta = theta / theta_norm
+
+        if init_frame == 'body':
+            try:
+                body_tr = await self._lookup_body_tf()
+            except Exception as exc:
+                return False, f'TF lookup vision<-body for initial direction failed: {exc}'
+            bq = body_tr.transform.rotation
+            body_yaw = math.atan2(
+                2.0 * (bq.w * bq.z + bq.x * bq.y),
+                1.0 - 2.0 * (bq.y * bq.y + bq.z * bq.z),
+            )
+            cy = math.cos(body_yaw)
+            sy = math.sin(body_yaw)
+            theta_vision = np.array([
+                cy * theta[0] - sy * theta[1],
+                sy * theta[0] + cy * theta[1],
+            ])
+            theta_vision_norm = float(np.linalg.norm(theta_vision))
+            if theta_vision_norm < eps:
+                return False, 'rotated probe direction collapsed to zero'
+            self.get_logger().info(
+                f'probe initial dir: body=({init_dx:+.3f}, {init_dy:+.3f}) '
+                f'body_yaw={body_yaw:+.3f}rad -> vision={theta_vision.tolist()}'
+            )
+            theta = theta_vision / theta_vision_norm
+        elif init_frame != 'vision':
+            return False, f"revolute_probe_initial_dir_frame must be 'body' or 'vision', got {init_frame!r}"
+
+        x = start_pos[:2].copy()
+        z = float(start_pos[2])
+        X = [x.copy()]
+        trajectory = [start_pos.copy()]
+        p = x + step_size * theta
+        best_acceptable_angle_deg = 0.0
+        best_acceptable_deviation = float('inf')
+        best_acceptable_step = 0
+
+        self._publish_feedback(goal_handle, 0.05, 'iterative probe: pulling joint')
+        self.get_logger().info(
+            f'iterative probe: step={step_size:.3f}m, phi_max={phi_max:.3f}rad, '
+            f'phi_min={phi_min:.3f}rad, conf_thresh={confidence_thresh:.2f}, '
+            f'min_steps={probe_min_steps}, max_steps={probe_max_steps}, '
+            f'target_angle={target_angle_deg:.1f}deg, accept_angle={accept_angle_deg:.1f}deg, '
+            f'theta0={theta.tolist()}'
+        )
+
+        def _rot2(angle):
+            ca = math.cos(angle)
+            sa = math.sin(angle)
+            return np.array([[ca, -sa], [sa, ca]])
+
+        for probe_step in range(probe_max_steps):
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                return False, 'canceled'
+            target = (float(p[0]), float(p[1]), z)
+            self._publish_arm_pose(target[0], target[1], target[2], *start_quat)
+            await self._sleep(probe_settle)
+            try:
+                tr = await self._lookup_hand_tf()
+                achieved = np.array(
+                    [tr.transform.translation.x,
+                     tr.transform.translation.y,
+                     tr.transform.translation.z],
+                    dtype=float,
+                )
+            except Exception as exc:
+                self.get_logger().warning(f'probe TF lookup failed: {exc}; using target as achieved')
+                achieved = np.array([target[0], target[1], z], dtype=float)
+
+            x_prev = x.copy()
+            x = achieved[:2].copy()
+            z = float(achieved[2])
+            X.append(x.copy())
+            trajectory.append(achieved.copy())
+
+            delta = float(np.linalg.norm(x - x_prev))
+            r = min(1.0, delta / step_size) if step_size > eps else 0.0
+
+            if len(X) >= probe_min_steps:
+                model, confidence = perception.fit_model_2d(np.asarray(X))
+            else:
+                model = ('UNDEFINED', None)
+                confidence = 0.0
+            self.get_logger().info(
+                f'probe {probe_step + 1}/{probe_max_steps}: target={target}, '
+                f'achieved={achieved.tolist()}, delta={delta:.4f}m, r={r:.3f}, '
+                f'model={model[0]}, confidence={confidence:.3f}'
+            )
+
+            feedback_progress = 0.10 + 0.85 * ((probe_step + 1) / probe_max_steps)
+            self._publish_feedback(
+                goal_handle,
+                feedback_progress,
+                f'probe {probe_step + 1}/{probe_max_steps} model={model[0]} conf={confidence:.2f}',
+            )
+
+            if confidence >= confidence_thresh and model[0] == 'CIRCULAR':
+                center = np.asarray(model[1]['center'], dtype=float)
+                radius = float(model[1]['radius'])
+                if radius > eps:
+                    dist_to_center = float(np.linalg.norm(x - center))
+                    arc_deviation = abs(dist_to_center - radius)
+
+                    start_vec = start_pos[:2] - center
+                    cur_vec = x - center
+                    start_ang = math.atan2(float(start_vec[1]), float(start_vec[0]))
+                    cur_ang = math.atan2(float(cur_vec[1]), float(cur_vec[0]))
+                    angle_swept = (cur_ang - start_ang + math.pi) % (2.0 * math.pi) - math.pi
+                    angle_swept_deg = math.degrees(abs(angle_swept))
+
+                    self.get_logger().info(
+                        f'arc check: deviation={arc_deviation:.3f}m, '
+                        f'angle_swept={angle_swept_deg:.1f}deg, radius={radius:.3f}m'
+                    )
+
+                    if arc_deviation > deviation_tolerance:
+                        return False, (
+                            f'open_cabinet aborted: arc deviation {arc_deviation:.3f}m > '
+                            f'{deviation_tolerance:.3f}m at probe step {probe_step + 1}'
+                        )
+
+                    if arc_deviation < success_distance and angle_swept_deg > best_acceptable_angle_deg:
+                        best_acceptable_angle_deg = angle_swept_deg
+                        best_acceptable_deviation = arc_deviation
+                        best_acceptable_step = probe_step + 1
+
+                    if angle_swept_deg >= target_angle_deg and arc_deviation < success_distance:
+                        msg = (
+                            f'open_cabinet reached target: angle={angle_swept_deg:.1f}deg, '
+                            f'deviation={arc_deviation:.3f}m, step={probe_step + 1}'
+                        )
+                        self._publish_feedback(goal_handle, 1.0, msg)
+                        self.get_logger().info(msg)
+                        return True, msg
+
+            if confidence >= confidence_thresh:
+                model_type, params = model
+                if model_type == 'LINEAR':
+                    direction = np.asarray(params['direction'], dtype=float)
+                    direction = direction / max(float(np.linalg.norm(direction)), eps)
+                    if np.dot(direction, theta) < 0:
+                        direction = -direction
+                    theta = direction
+                    p = x + step_size * theta
+                elif model_type == 'CIRCULAR':
+                    center = np.asarray(params['center'], dtype=float)
+                    radius = float(params['radius'])
+                    if radius <= eps:
+                        p = x + step_size * theta
+                    else:
+                        vec = x - center
+                        angle = math.atan2(float(vec[1]), float(vec[0]))
+                        tangent_ccw = np.array([-math.sin(angle), math.cos(angle)])
+                        tangent_cw = -tangent_ccw
+                        if np.dot(tangent_ccw, theta) >= np.dot(tangent_cw, theta):
+                            sign = 1.0
+                            tangent = tangent_ccw
+                        else:
+                            sign = -1.0
+                            tangent = tangent_cw
+                        theta = tangent / max(float(np.linalg.norm(tangent)), eps)
+                        angle = angle + sign * (step_size / radius)
+                        p = center + radius * np.array([math.cos(angle), math.sin(angle)])
+                else:
+                    p = x + step_size * theta
+            else:
+                phi = (1.0 - r) * phi_max
+                if phi >= phi_min:
+                    u = x - x_prev
+                    u_norm = float(np.linalg.norm(u))
+                    if u_norm > eps:
+                        u = u / u_norm
+                        theta_plus = _rot2(phi) @ theta
+                        theta_minus = _rot2(-phi) @ theta
+                        if np.dot(theta_plus, u) >= np.dot(theta_minus, u):
+                            theta = theta_plus
+                        else:
+                            theta = theta_minus
+                        theta = theta / max(float(np.linalg.norm(theta)), eps)
+                p = x + step_size * theta
+
+        trajectory = np.asarray(trajectory)
+        if len(trajectory) < 2:
+            return False, 'iterative probe collected too few points'
+
+        try:
+            if _as_bool(self.get_parameter('revolute_force_revolute').value):
+                joint_type, params = perception.force_revolute(trajectory)
+            else:
+                joint_type, params = perception.analyze_trajectory_and_estimate_joint(trajectory)
+            self.get_logger().info(
+                f'final joint estimate: type={joint_type}, params={params}'
+            )
+        except Exception as exc:
+            self.get_logger().warning(f'final joint estimation failed: {exc}')
+
+        if best_acceptable_angle_deg >= accept_angle_deg:
+            msg = (
+                f'open_cabinet accepted: angle={best_acceptable_angle_deg:.1f}deg '
+                f'>= {accept_angle_deg:.1f}deg, target={target_angle_deg:.1f}deg, '
+                f'deviation={best_acceptable_deviation:.3f}m, step={best_acceptable_step}'
+            )
+            self._publish_feedback(goal_handle, 1.0, msg)
+            self.get_logger().info(msg)
+            return True, msg
+
+        return False, (
+            f'open_cabinet probe finished without hitting success: '
+            f'{probe_max_steps} steps, '
+            f'accept angle {accept_angle_deg:.1f}deg not reached '
+            f'(best={best_acceptable_angle_deg:.1f}deg, target={target_angle_deg:.1f}deg)'
+        )
+
     def _select_push_action(self, actor, state):
         if actor is None:
             return [0.35, 0.0]
@@ -602,19 +1020,32 @@ class PolicyServerNode(Node):
     async def _lookup_hand_tf(self, timeout_sec: float = 3.0):
         vision = str(self.get_parameter('vision_frame').value)
         hand = str(self.get_parameter('hand_frame').value)
+        return await self._lookup_tf(vision, hand, timeout_sec)
+
+    async def _lookup_body_tf(self, timeout_sec: float = 3.0):
+        vision = str(self.get_parameter('vision_frame').value)
+        body = str(self.get_parameter('body_frame').value)
+        return await self._lookup_tf(vision, body, timeout_sec)
+
+    async def _lookup_body_hand_tf(self, timeout_sec: float = 3.0):
+        body = str(self.get_parameter('body_frame').value)
+        hand = str(self.get_parameter('hand_frame').value)
+        return await self._lookup_tf(body, hand, timeout_sec)
+
+    async def _lookup_tf(self, target_frame: str, source_frame: str, timeout_sec: float = 3.0):
         deadline = time.time() + timeout_sec
         last_exc = None
         while time.time() < deadline:
             try:
-                return self._tf_buffer.lookup_transform(vision, hand, rclpy.time.Time())
+                return self._tf_buffer.lookup_transform(target_frame, source_frame, rclpy.time.Time())
             except Exception as exc:
                 last_exc = exc
                 await self._sleep(0.1)
-        raise RuntimeError(f'TF unavailable {vision} -> {hand}: {last_exc}')
+        raise RuntimeError(f'TF unavailable {target_frame} -> {source_frame}: {last_exc}')
 
     def _publish_arm_pose(self, x, y, z, qx, qy, qz, qw, frame=None):
         if frame is None:
-            frame = str(self.get_parameter('vision_frame').value)
+            frame = str(self.get_parameter('arm_pose_frame').value)
         msg = PoseStamped()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = frame
@@ -636,6 +1067,33 @@ class PolicyServerNode(Node):
         p = tr.transform.translation
         q = tr.transform.rotation
         self._publish_arm_pose(p.x, p.y, target_z, q.x, q.y, q.z, q.w)
+        await self._sleep(float(self.get_parameter('push_arm_pose_settle_sec').value))
+        return True
+
+    async def _move_hand_by_body_delta(
+        self,
+        dx: float,
+        dy: float,
+        dz: float,
+        label: str,
+    ) -> bool:
+        try:
+            tr = await self._lookup_body_hand_tf()
+        except Exception as exc:
+            self.get_logger().warning(f'{label}: TF lookup failed: {exc}')
+            return False
+        p = tr.transform.translation
+        q = tr.transform.rotation
+        self._publish_arm_pose(
+            p.x + float(dx),
+            p.y + float(dy),
+            p.z + float(dz),
+            q.x,
+            q.y,
+            q.z,
+            q.w,
+            frame='body',
+        )
         await self._sleep(float(self.get_parameter('push_arm_pose_settle_sec').value))
         return True
 
@@ -828,6 +1286,67 @@ class PolicyServerNode(Node):
         self._stop_body()
         return True, command.status
 
+    async def _run_place_body_approach(
+        self,
+        forward_m: float,
+        duration_sec: float,
+        goal_handle,
+    ) -> tuple[bool, str]:
+        mode = str(self.get_parameter('place_body_approach_mode').value).strip().lower()
+        if mode == 'cmd_vel':
+            command = BodyCommand(
+                status='place approach',
+                duration_sec=duration_sec,
+                linear_x=forward_m / max(duration_sec, 1e-6),
+            )
+            return await self._run_body_command(command, goal_handle)
+        if mode not in {'trajectory', 'body_trajectory'}:
+            return False, f'unknown place_body_approach_mode: {mode}'
+        return await self._run_body_trajectory(forward_m, duration_sec, goal_handle)
+
+    async def _run_body_trajectory(
+        self,
+        forward_m: float,
+        duration_sec: float,
+        goal_handle,
+    ) -> tuple[bool, str]:
+        if not self._trajectory_client.wait_for_server(timeout_sec=3.0):
+            return False, (
+                f'trajectory action '
+                f'{self.get_parameter("place_trajectory_action").value} unavailable'
+            )
+
+        goal = Trajectory.Goal()
+        goal.target_pose.header.stamp = self.get_clock().now().to_msg()
+        goal.target_pose.header.frame_id = 'body'
+        goal.target_pose.pose.position.x = float(forward_m)
+        goal.target_pose.pose.position.y = 0.0
+        goal.target_pose.pose.position.z = 0.0
+        goal.target_pose.pose.orientation.w = 1.0
+        goal.duration = Duration(seconds=float(duration_sec)).to_msg()
+        goal.precise_positioning = False
+        goal.disable_obstacle_avoidance = _as_bool(
+            self.get_parameter('place_disable_obstacle_avoidance').value
+        )
+
+        send_future = self._trajectory_client.send_goal_async(goal)
+        trajectory_goal = await send_future
+        if not trajectory_goal.accepted:
+            return False, 'place body trajectory rejected'
+
+        result_future = trajectory_goal.get_result_async()
+        while not result_future.done():
+            if goal_handle.is_cancel_requested:
+                await trajectory_goal.cancel_goal_async()
+                goal_handle.canceled()
+                return False, 'canceled'
+            await self._sleep(0.1)
+
+        result = result_future.result().result
+        if not bool(result.success):
+            return False, f'place body trajectory failed: {result.message}'
+        return True, f'place body trajectory moved {forward_m:.2f}m'
+
     async def _call_trigger(self, name: str) -> tuple[bool, str]:
         name = self._service_name(name)
         client = self._trigger_clients.get(name)
@@ -856,6 +1375,16 @@ class PolicyServerNode(Node):
     def _is_push_policy(policy_name: str) -> bool:
         policy = policy_name.strip().lower().replace('-', '_').replace(' ', '_')
         return policy in {'push_box', 'box_push', 'push'}
+
+    @staticmethod
+    def _is_revolute_policy(policy_name: str) -> bool:
+        policy = policy_name.strip().lower().replace('-', '_').replace(' ', '_')
+        return policy in {'open_cabinet', 'open_door', 'open_revolute', 'open_revolute_door'}
+
+    @staticmethod
+    def _is_place_policy(policy_name: str) -> bool:
+        policy = policy_name.strip().lower().replace('-', '_').replace(' ', '_')
+        return policy in {'place', 'place_on_table', 'dropoff', 'drop_off'}
 
     def _service_name(self, name: str) -> str:
         if name.startswith('/'):

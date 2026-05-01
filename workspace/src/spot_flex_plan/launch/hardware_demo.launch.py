@@ -26,7 +26,6 @@ def generate_launch_description():
 
     waypoints_file = LaunchConfiguration('waypoints_file')
     box_grasp_side = LaunchConfiguration('box_grasp_side')
-    skip_box_push = LaunchConfiguration('skip_box_push')
     nav_backend = LaunchConfiguration('nav_backend')
     policy_dry_run = LaunchConfiguration('policy_dry_run')
     policy_use_learned = LaunchConfiguration('policy_use_learned')
@@ -61,6 +60,35 @@ def generate_launch_description():
     push_action_dim = LaunchConfiguration('push_action_dim')
     revolute_model_dir = LaunchConfiguration('revolute_model_dir')
     revolute_model_name = LaunchConfiguration('revolute_model_name')
+    flex_revolute_flow = LaunchConfiguration('flex_revolute_flow')
+    revolute_probe_step_m = LaunchConfiguration('revolute_probe_step_m')
+    revolute_probe_max_steps = LaunchConfiguration('revolute_probe_max_steps')
+    revolute_probe_min_steps = LaunchConfiguration('revolute_probe_min_steps')
+    revolute_probe_phi_max_rad = LaunchConfiguration('revolute_probe_phi_max_rad')
+    revolute_probe_phi_min_rad = LaunchConfiguration('revolute_probe_phi_min_rad')
+    revolute_probe_confidence_thresh = LaunchConfiguration('revolute_probe_confidence_thresh')
+    revolute_probe_initial_dir_x = LaunchConfiguration('revolute_probe_initial_dir_x')
+    revolute_probe_initial_dir_y = LaunchConfiguration('revolute_probe_initial_dir_y')
+    revolute_probe_initial_dir_frame = LaunchConfiguration('revolute_probe_initial_dir_frame')
+    revolute_probe_settle_sec = LaunchConfiguration('revolute_probe_settle_sec')
+    revolute_force_revolute = LaunchConfiguration('revolute_force_revolute')
+    revolute_success_angle_deg = LaunchConfiguration('revolute_success_angle_deg')
+    revolute_accept_angle_deg = LaunchConfiguration('revolute_accept_angle_deg')
+    revolute_arc_points = LaunchConfiguration('revolute_arc_points')
+    revolute_arc_direction = LaunchConfiguration('revolute_arc_direction')
+    revolute_invert_action_x = LaunchConfiguration('revolute_invert_action_x')
+    flex_place_flow = LaunchConfiguration('flex_place_flow')
+    place_pre_trigger = LaunchConfiguration('place_pre_trigger')
+    place_height_m = LaunchConfiguration('place_height_m')
+    place_forward_m = LaunchConfiguration('place_forward_m')
+    place_hand_forward_m = LaunchConfiguration('place_hand_forward_m')
+    place_forward_duration_sec = LaunchConfiguration('place_forward_duration_sec')
+    place_body_approach_mode = LaunchConfiguration('place_body_approach_mode')
+    place_trajectory_action = LaunchConfiguration('place_trajectory_action')
+    place_disable_obstacle_avoidance = LaunchConfiguration('place_disable_obstacle_avoidance')
+    place_lower_m = LaunchConfiguration('place_lower_m')
+    place_impedance_settle_sec = LaunchConfiguration('place_impedance_settle_sec')
+    place_release_settle_sec = LaunchConfiguration('place_release_settle_sec')
     prismatic_model_dir = LaunchConfiguration('prismatic_model_dir')
     prismatic_model_name = LaunchConfiguration('prismatic_model_name')
     launch_spot_driver = LaunchConfiguration('launch_spot_driver')
@@ -83,6 +111,21 @@ def generate_launch_description():
     )
     perception_require_box_gripper_open = LaunchConfiguration(
         'perception_require_box_gripper_open'
+    )
+    perception_open_gripper_before_handle_image = LaunchConfiguration(
+        'perception_open_gripper_before_handle_image'
+    )
+    perception_require_handle_gripper_open = LaunchConfiguration(
+        'perception_require_handle_gripper_open'
+    )
+    perception_open_gripper_before_object_image = LaunchConfiguration(
+        'perception_open_gripper_before_object_image'
+    )
+    perception_require_object_gripper_open = LaunchConfiguration(
+        'perception_require_object_gripper_open'
+    )
+    perception_grasp_object_after_detection = LaunchConfiguration(
+        'perception_grasp_object_after_detection'
     )
     perception_gripper_settle_sec = LaunchConfiguration('perception_gripper_settle_sec')
     perception_box_detection_retry_count = LaunchConfiguration(
@@ -110,11 +153,6 @@ def generate_launch_description():
             'box_grasp_side',
             default_value='right',
             description='Box edge to grasp for pushing: left or right.',
-        ),
-        DeclareLaunchArgument(
-            'skip_box_push',
-            default_value='false',
-            description='Skip undock + box-push prelude; FSM starts at MOVE_TO_CABINET.',
         ),
         DeclareLaunchArgument(
             'nav_backend',
@@ -287,6 +325,151 @@ def generate_launch_description():
             description='Actor name prefix for revolute opening.',
         ),
         DeclareLaunchArgument(
+            'flex_revolute_flow',
+            default_value='true',
+            description='Use the wiggle-probe + arc path-following flow for open_cabinet.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_step_m',
+            default_value='0.04',
+            description='Probe step length per iteration (meters).',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_max_steps',
+            default_value='30',
+            description='Maximum iterative probe/opening steps before giving up.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_min_steps',
+            default_value='5',
+            description='Minimum samples before fit_model_2d is consulted.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_phi_max_rad',
+            default_value='0.7853981633974483',
+            description='Max heading rotation per low-confidence probe step (radians, default pi/4).',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_phi_min_rad',
+            default_value='0.0',
+            description='Min heading rotation threshold (radians).',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_confidence_thresh',
+            default_value='0.8',
+            description='2D model confidence required to follow line/circle.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_initial_dir_x',
+            default_value='-1.0',
+            description='Initial probe direction x-component in revolute_probe_initial_dir_frame.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_initial_dir_y',
+            default_value='0.0',
+            description='Initial probe direction y-component in revolute_probe_initial_dir_frame.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_initial_dir_frame',
+            default_value='body',
+            description="Frame for initial probe direction: 'body' or 'vision'. Default body (-X pulls toward Spot).",
+        ),
+        DeclareLaunchArgument(
+            'revolute_probe_settle_sec',
+            default_value='2.0',
+            description='Settle time after each probe arm_pose command before reading achieved pose.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_force_revolute',
+            default_value='false',
+            description='Skip joint-type discrimination and force a revolute fit.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_success_angle_deg',
+            default_value='75.0',
+            description='Preferred arc sweep target angle for opening the revolute joint.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_accept_angle_deg',
+            default_value='60.0',
+            description='Minimum arc sweep angle accepted as successful if the preferred target is not reached.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_arc_points',
+            default_value='60',
+            description='Number of waypoints along the revolute arc path.',
+        ),
+        DeclareLaunchArgument(
+            'revolute_arc_direction',
+            default_value='negative',
+            description="Arc sweep direction: 'positive' (CCW) or 'negative' (CW).",
+        ),
+        DeclareLaunchArgument(
+            'revolute_invert_action_x',
+            default_value='true',
+            description='Invert action[0] sign (matches flex_spot door_open convention).',
+        ),
+        DeclareLaunchArgument(
+            'flex_place_flow',
+            default_value='true',
+            description='Use the table drop-off sequence for place instead of a bare open_gripper.',
+        ),
+        DeclareLaunchArgument(
+            'place_pre_trigger',
+            default_value='',
+            description='Optional trigger service to call before table drop-off arm motion. Empty preserves the current grasp pose.',
+        ),
+        DeclareLaunchArgument(
+            'place_height_m',
+            default_value='0.762',
+            description='Hand z target before drop-off, in meters (30 inches).',
+        ),
+        DeclareLaunchArgument(
+            'place_forward_m',
+            default_value='0.5',
+            description='Forward body motion at the table before release, in meters.',
+        ),
+        DeclareLaunchArgument(
+            'place_hand_forward_m',
+            default_value='0.30',
+            description='Forward hand motion in the body frame after the body approach, in meters.',
+        ),
+        DeclareLaunchArgument(
+            'place_forward_duration_sec',
+            default_value='4.0',
+            description='Duration for the forward body motion during table drop-off.',
+        ),
+        DeclareLaunchArgument(
+            'place_body_approach_mode',
+            default_value='trajectory',
+            description="Body approach command mode for place: 'trajectory' or 'cmd_vel'.",
+        ),
+        DeclareLaunchArgument(
+            'place_trajectory_action',
+            default_value='/spot/trajectory',
+            description='Spot trajectory action used for the body-relative table approach.',
+        ),
+        DeclareLaunchArgument(
+            'place_disable_obstacle_avoidance',
+            default_value='true',
+            description='Disable obstacle avoidance for the short table approach trajectory.',
+        ),
+        DeclareLaunchArgument(
+            'place_lower_m',
+            default_value='0.23',
+            description='Downward hand motion before release, in meters.',
+        ),
+        DeclareLaunchArgument(
+            'place_impedance_settle_sec',
+            default_value='2.0',
+            description='Gentle impedance settle duration before opening the gripper.',
+        ),
+        DeclareLaunchArgument(
+            'place_release_settle_sec',
+            default_value='0.5',
+            description='Pause after opening the gripper before stowing the arm.',
+        ),
+        DeclareLaunchArgument(
             'prismatic_model_dir',
             default_value='/repo/workspace/model_cache/flex/prismatic',
             description='Directory containing prismatic_actor.pth.',
@@ -385,6 +568,31 @@ def generate_launch_description():
             description='Abort find_box_grasp_point if the gripper cannot be opened.',
         ),
         DeclareLaunchArgument(
+            'perception_open_gripper_before_handle_image',
+            default_value='true',
+            description='Open the gripper before capturing the cabinet handle image.',
+        ),
+        DeclareLaunchArgument(
+            'perception_require_handle_gripper_open',
+            default_value='false',
+            description='Abort find_cabinet_handle if the gripper cannot be opened.',
+        ),
+        DeclareLaunchArgument(
+            'perception_open_gripper_before_object_image',
+            default_value='true',
+            description='Open the gripper before capturing the in-cabinet object image.',
+        ),
+        DeclareLaunchArgument(
+            'perception_require_object_gripper_open',
+            default_value='false',
+            description='Abort find_object if the gripper cannot be opened.',
+        ),
+        DeclareLaunchArgument(
+            'perception_grasp_object_after_detection',
+            default_value='true',
+            description='Run Spot grasp_pixel after detecting the object via OWL.',
+        ),
+        DeclareLaunchArgument(
             'perception_gripper_settle_sec',
             default_value='1.5',
             description='Delay after opening gripper before using a hand-camera image.',
@@ -471,13 +679,15 @@ def generate_launch_description():
             parameters=[{
                 'waypoints_file': waypoints_file,
                 'box_grasp_side': box_grasp_side,
-                'skip_box_push': skip_box_push,
             }],
             remappings=[
                 ('undock', '/spot/undock'),
                 ('dock', '/spot/dock'),
                 ('arm_carry', '/spot/arm_carry'),
                 ('arm_stow', '/spot/arm_stow'),
+                ('open_gripper', '/spot/open_gripper'),
+                ('close_gripper', '/spot/close_gripper'),
+                ('set_gripper_angle', '/spot/set_gripper_angle'),
             ],
         ),
         Node(
@@ -550,6 +760,35 @@ def generate_launch_description():
                 'push_action_dim': push_action_dim,
                 'revolute_model_dir': revolute_model_dir,
                 'revolute_model_name': revolute_model_name,
+                'flex_revolute_flow': flex_revolute_flow,
+                'revolute_probe_step_m': revolute_probe_step_m,
+                'revolute_probe_max_steps': revolute_probe_max_steps,
+                'revolute_probe_min_steps': revolute_probe_min_steps,
+                'revolute_probe_phi_max_rad': revolute_probe_phi_max_rad,
+                'revolute_probe_phi_min_rad': revolute_probe_phi_min_rad,
+                'revolute_probe_confidence_thresh': revolute_probe_confidence_thresh,
+                'revolute_probe_initial_dir_x': revolute_probe_initial_dir_x,
+                'revolute_probe_initial_dir_y': revolute_probe_initial_dir_y,
+                'revolute_probe_initial_dir_frame': revolute_probe_initial_dir_frame,
+                'revolute_probe_settle_sec': revolute_probe_settle_sec,
+                'revolute_force_revolute': revolute_force_revolute,
+                'revolute_success_angle_deg': revolute_success_angle_deg,
+                'revolute_accept_angle_deg': revolute_accept_angle_deg,
+                'revolute_arc_points': revolute_arc_points,
+                'revolute_arc_direction': revolute_arc_direction,
+                'revolute_invert_action_x': revolute_invert_action_x,
+                'flex_place_flow': flex_place_flow,
+                'place_pre_trigger': place_pre_trigger,
+                'place_height_m': place_height_m,
+                'place_forward_m': place_forward_m,
+                'place_hand_forward_m': place_hand_forward_m,
+                'place_forward_duration_sec': place_forward_duration_sec,
+                'place_body_approach_mode': place_body_approach_mode,
+                'place_trajectory_action': place_trajectory_action,
+                'place_disable_obstacle_avoidance': place_disable_obstacle_avoidance,
+                'place_lower_m': place_lower_m,
+                'place_impedance_settle_sec': place_impedance_settle_sec,
+                'place_release_settle_sec': place_release_settle_sec,
                 'prismatic_model_dir': prismatic_model_dir,
                 'prismatic_model_name': prismatic_model_name,
                 'cmd_vel_topic': '/spot/cmd_vel',
@@ -574,6 +813,11 @@ def generate_launch_description():
                 'open_gripper_service': perception_open_gripper_service,
                 'open_gripper_before_box_image': perception_open_gripper_before_box_image,
                 'require_box_gripper_open': perception_require_box_gripper_open,
+                'open_gripper_before_handle_image': perception_open_gripper_before_handle_image,
+                'require_handle_gripper_open': perception_require_handle_gripper_open,
+                'open_gripper_before_object_image': perception_open_gripper_before_object_image,
+                'require_object_gripper_open': perception_require_object_gripper_open,
+                'grasp_object_after_detection': perception_grasp_object_after_detection,
                 'gripper_settle_sec': perception_gripper_settle_sec,
                 'box_detection_retry_count': perception_box_detection_retry_count,
                 'grasp_box_after_detection': perception_grasp_box_after_detection,

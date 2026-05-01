@@ -12,11 +12,16 @@ locations:
     y: 1.0
     yaw: 1.5708
     graphnav_waypoint: cabinet
+  table:
+    x: 3.5
+    y: 0.0
+    yaw: 0.0
+    graphnav_waypoint: table
   dropoff:
     x: 3.5
     y: 0.0
     yaw: 0.0
-    graphnav_waypoint: dropoff
+    graphnav_waypoint: table
   dock:
     x: 0.0
     y: 0.0
