@@ -2,19 +2,20 @@
 
 ROS 2 system for extending Boston Dynamics Spot with navigation, perception, planning, and arm control.
 
-Initial Implementation: c8455e4
-Nav2 and MoveIt implemented: d71513b
-Perception implemented: 711dcad
-Supervisory Control implemented: ee73f85
+- Initial Implementation: c8455e4
+- Nav2 and MoveIt implemented: d71513b
+- Perception implemented: 711dcad
+- Supervisory Control implemented: ee73f85
+- Custom node (spot_flex_control policy server): 50a4397
 
 ## Current State of the project
 
-Nav2 is making wonky maps.
-MoveIt seems to work fine.
-Perception works great.
-Supervisory control appears to make the plan but the non-working nav2 is holding everything else up.
-
-My plan is to get spot's native graph nav working first for the demo, then try to get nav2 working.
+- Nav2 is making wonky maps.
+- MoveIt seems to work fine.
+- Perception works great.
+- Supervisory control appears to make the plan but the non-working nav2 is holding everything else up.
+- Switched to GraphNav and Spots own grasp commands
+- Spot is executing the demo but in pieces, some of the ends of some actions are in a bad place to start the next action.
 
 
 ## Project Structure
