@@ -1,0 +1,14 @@
+float64 dx
+float64 dy
+float64 d_yaw
+float64 vx
+float64 vy
+float64 v_yaw
+float64 duration_sec
+bool use_impedance
+float64 stiffness
+float64 damping
+bool two_phase
+---
+bool success
+string message

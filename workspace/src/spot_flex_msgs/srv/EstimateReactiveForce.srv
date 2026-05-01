@@ -1,0 +1,15 @@
+bool probe_force
+float64 max_force
+float64 probe_step_m
+int32 max_probe_steps
+float64 settle_time_sec
+float64 force_drop_threshold
+float64 stiffness
+float64 damping
+string grasp_strategy
+string surface_type
+string robot_side
+---
+bool success
+string message
+float64 norm_reactive_force

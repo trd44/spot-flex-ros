@@ -94,6 +94,8 @@ class ConductorNode(Node):
             'waypoints_file',
             os.path.join(get_package_share_directory('spot_flex_plan'),
                          'config', DEFAULT_WAYPOINTS))
+        self.declare_parameter('box_grasp_side', 'right')
+        self.declare_parameter('skip_box_push', False)
 
         self._fetch_server = ActionServer(
             self, FetchItem, 'fetch_item',
@@ -113,8 +115,13 @@ class ConductorNode(Node):
             goal_handle.abort()
             return FetchItem.Result(success=False, message=f'waypoint load failed: {e}')
 
-        sm = build_demo_fsm()
-        self.get_logger().info(f'starting FSM for item={blackboard["target_item"]}')
+        box_grasp_side = self.get_parameter('box_grasp_side').value
+        skip_box_push = bool(self.get_parameter('skip_box_push').value)
+        sm = build_demo_fsm(box_grasp_side=box_grasp_side, skip_box_push=skip_box_push)
+        self.get_logger().info(
+            f'starting FSM for item={blackboard["target_item"]}, '
+            f'box_grasp_side={box_grasp_side}, skip_box_push={skip_box_push}'
+        )
 
         result = {}
         def run():
@@ -175,7 +182,8 @@ def main():
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

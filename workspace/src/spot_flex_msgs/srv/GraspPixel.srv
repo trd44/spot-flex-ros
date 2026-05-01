@@ -1,0 +1,6 @@
+int32 pixel_x
+int32 pixel_y
+string image_source
+---
+bool success
+string message

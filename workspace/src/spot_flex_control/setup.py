@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'spot_flex_control'
@@ -9,6 +11,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -21,6 +24,7 @@ setup(
             'nav_node = spot_flex_control.nav_node:main',
             'arm_node = spot_flex_control.arm_node:main',
             'policy_server_node = spot_flex_control.policy_server_node:main',
+            'graphnav_initializer_node = spot_flex_control.graphnav_initializer_node:main',
         ],
     },
 )

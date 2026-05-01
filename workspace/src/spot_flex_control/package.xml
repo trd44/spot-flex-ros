@@ -10,8 +10,10 @@
   <depend>rclpy</depend>
   <depend>std_srvs</depend>
   <depend>geometry_msgs</depend>
+  <depend>python3-numpy</depend>
   <depend>trajectory_msgs</depend>
   <depend>spot_flex_msgs</depend>
+  <depend>spot_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>tf2_ros</depend>
   <exec_depend condition="$SPOT_FLEX_ENABLE_MOVEIT == 1">moveit_py</exec_depend>

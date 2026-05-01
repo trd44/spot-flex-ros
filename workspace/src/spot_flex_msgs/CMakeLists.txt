@@ -11,7 +11,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "action/FindCabinetHandle.action"
   "action/FindObject.action"
   "action/ExecutePolicy.action"
+  "srv/EstimateReactiveForce.srv"
+  "srv/GetHandPose.srv"
   "srv/GetPlan.srv"
+  "srv/GraspPixel.srv"
+  "srv/ImpedanceSettle.srv"
+  "srv/PushObjectStep.srv"
   DEPENDENCIES std_msgs
 )
 

@@ -1,0 +1,44 @@
+policy_server_node:
+  ros__parameters:
+    dry_run: true
+    policy_delay_sec: 1.0
+    body_command_period_sec: 0.1
+    cmd_vel_topic: "cmd_vel"
+    trigger_service_prefix: ""
+
+    push_speed_mps: 0.12
+    push_lateral_speed_mps: 0.0
+    push_yaw_rate_radps: 0.0
+    push_duration_sec: 2.0
+
+    revolute_linear_speed_mps: 0.04
+    revolute_lateral_speed_mps: 0.08
+    revolute_yaw_rate_radps: 0.18
+    revolute_duration_sec: 4.0
+
+    prismatic_speed_mps: 0.08
+    prismatic_duration_sec: 3.0
+    prismatic_axis_xy: "1.0,0.0"
+
+    use_learned_policies: false
+    policy_step_duration_sec: 0.5
+    policy_max_steps: 12
+    action_scale: 0.05
+    max_linear_speed_mps: 0.18
+    max_angular_speed_radps: 0.35
+    invert_action_x: true
+
+    push_model_dir: ""
+    push_model_name: "best_model"
+    revolute_model_dir: ""
+    revolute_model_name: "final"
+    prismatic_model_dir: ""
+    prismatic_model_name: "final"
+
+    position_for_grasp_triggers: "arm_unstow"
+    grasp_triggers: "close_gripper,arm_carry"
+    place_triggers: "open_gripper"
+    revolute_pre_triggers: "arm_unstow"
+    revolute_post_triggers: ""
+    prismatic_pre_triggers: "arm_unstow"
+    prismatic_post_triggers: ""

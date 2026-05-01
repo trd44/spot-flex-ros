@@ -77,29 +77,51 @@ def _action(action_type, name, goal_builder):
 
 
 def _action_to(next_label):
-    return {SUCCEED: next_label, ABORT: 'ABORTED', CANCEL: 'ABORTED'}
+    return {SUCCEED: next_label, ABORT: 'RECOVERY_ARM_STOW', CANCEL: 'RECOVERY_ARM_STOW'}
 
 
 def _service_to(next_label):
+    return {SUCCEED: next_label, ABORT: 'RECOVERY_ARM_STOW'}
+
+
+def _terminal_action_to(next_label):
+    return {SUCCEED: next_label, ABORT: 'ABORTED', CANCEL: 'ABORTED'}
+
+
+def _terminal_service_to(next_label):
     return {SUCCEED: next_label, ABORT: 'ABORTED'}
 
 
-def build_demo_fsm() -> StateMachine:
-    """Build the demo FSM. Outcomes: 'DONE', 'ABORTED'."""
+def _recovery_action_to(next_label):
+    return {SUCCEED: next_label, ABORT: next_label, CANCEL: next_label}
+
+
+def build_demo_fsm(box_grasp_side='right', skip_box_push=False) -> StateMachine:
+    """Build the demo FSM. Outcomes: 'DONE', 'ABORTED'.
+
+    When ``skip_box_push`` is True, the FSM's first state is MOVE_TO_CABINET
+    and the undock + box-push prelude is omitted.
+    """
+    box_grasp_side = (box_grasp_side or 'right').strip().lower()
     sm = StateMachine(outcomes=['DONE', 'ABORTED'])
 
-    sm.add_state('UNDOCK', _trigger_service('undock'),
-                 transitions=_service_to('MOVE_TO_BOX'))
+    if not skip_box_push:
+        sm.add_state('UNDOCK', _trigger_service('undock'),
+                     transitions=_service_to('MOVE_TO_BOX'))
 
-    sm.add_state('MOVE_TO_BOX', _action(NavigateToPose, 'go_to', _goto('box_pose', 'box')),
-                 transitions=_action_to('PERCEIVE_BOX_GRASP'))
+        sm.add_state('MOVE_TO_BOX', _action(NavigateToPose, 'go_to', _goto('box_pose', 'box')),
+                     transitions=_action_to('PERCEIVE_BOX_GRASP'))
 
-    sm.add_state('PERCEIVE_BOX_GRASP',
-                 _action(FindBoxGraspPoint, 'find_box_grasp_point', _find_box('left')),
-                 transitions=_action_to('PUSH_BOX'))
+        sm.add_state('PERCEIVE_BOX_GRASP',
+                     _action(FindBoxGraspPoint, 'find_box_grasp_point',
+                             _find_box(box_grasp_side)),
+                     transitions=_action_to('PUSH_BOX'))
 
-    sm.add_state('PUSH_BOX', _action(ExecutePolicy, 'execute_policy', _policy('push_box')),
-                 transitions=_action_to('MOVE_TO_CABINET'))
+        sm.add_state('PUSH_BOX', _action(ExecutePolicy, 'execute_policy', _policy('push_box')),
+                     transitions=_action_to('STOW_AFTER_PUSH'))
+
+        sm.add_state('STOW_AFTER_PUSH', _trigger_service('arm_stow'),
+                     transitions=_service_to('MOVE_TO_CABINET'))
 
     sm.add_state('MOVE_TO_CABINET', _action(NavigateToPose, 'go_to', _goto('cabinet_pose')),
                  transitions=_action_to('PERCEIVE_HANDLE'))
@@ -140,9 +162,20 @@ def build_demo_fsm() -> StateMachine:
                  transitions=_service_to('MOVE_TO_DOCK'))
 
     sm.add_state('MOVE_TO_DOCK', _action(NavigateToPose, 'go_to', _goto('dock_pose')),
-                 transitions=_action_to('DOCK'))
+                 transitions=_terminal_action_to('DOCK'))
 
     sm.add_state('DOCK', ServiceState(Dock, 'dock', _dock_request),
                  transitions={SUCCEED: 'DONE', ABORT: 'ABORTED'})
+
+    sm.add_state('RECOVERY_ARM_STOW', _trigger_service('arm_stow'),
+                 transitions={SUCCEED: 'RECOVERY_MOVE_TO_DOCK',
+                              ABORT: 'RECOVERY_MOVE_TO_DOCK'})
+
+    sm.add_state('RECOVERY_MOVE_TO_DOCK',
+                 _action(NavigateToPose, 'go_to', _goto('dock_pose')),
+                 transitions=_recovery_action_to('RECOVERY_DOCK'))
+
+    sm.add_state('RECOVERY_DOCK', ServiceState(Dock, 'dock', _dock_request),
+                 transitions=_terminal_service_to('ABORTED'))
 
     return sm

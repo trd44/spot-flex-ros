@@ -45,6 +45,7 @@ class OwlDetector:
         self.device = device or self._default_device()
         self.cache_dir = cache_dir or self._default_cache_dir()
         self.local_files_only = local_files_only
+        self.model_ref = self._resolve_model_ref(model_id, self.cache_dir)
         self._processor = None
         self._model = None
 
@@ -62,6 +63,7 @@ class OwlDetector:
         if not labels:
             raise ValueError("labels must contain at least one text prompt")
 
+        image_rgb = np.ascontiguousarray(image_rgb)
         self._load_model()
         threshold = confidence_threshold or self.confidence_threshold
 
@@ -133,12 +135,12 @@ class OwlDetector:
             return
 
         kwargs = {"local_files_only": self.local_files_only}
-        if self.cache_dir:
+        if self.cache_dir and not Path(self.model_ref).exists():
             kwargs["cache_dir"] = self.cache_dir
 
-        self._processor = AutoProcessor.from_pretrained(self.model_id, **kwargs)
+        self._processor = AutoProcessor.from_pretrained(self.model_ref, **kwargs)
         self._model = AutoModelForZeroShotObjectDetection.from_pretrained(
-            self.model_id,
+            self.model_ref,
             **kwargs,
         ).to(self.device)
         self._model.eval()
@@ -168,13 +170,48 @@ class OwlDetector:
                 return str(candidate)
         return None
 
+    @classmethod
+    def _resolve_model_ref(cls, model_id: str, cache_dir: Optional[str]) -> str:
+        if not cache_dir:
+            return model_id
+
+        cached_model_dir = Path(cache_dir) / f"models--{model_id.replace('/', '--')}"
+        snapshot_root = cached_model_dir / "snapshots"
+        if not snapshot_root.exists():
+            return model_id
+
+        ref_path = cached_model_dir / "refs" / "main"
+        snapshot_ids = []
+        if ref_path.exists():
+            snapshot_ids.append(ref_path.read_text(encoding="utf-8").strip())
+        snapshot_ids.extend(path.name for path in snapshot_root.iterdir() if path.is_dir())
+
+        required_files = (
+            "config.json",
+            "preprocessor_config.json",
+            "tokenizer_config.json",
+            "vocab.json",
+            "merges.txt",
+        )
+        weight_files = ("model.safetensors", "pytorch_model.bin")
+        for snapshot_id in snapshot_ids:
+            snapshot_dir = snapshot_root / snapshot_id
+            if not snapshot_dir.exists():
+                continue
+            if all((snapshot_dir / name).exists() for name in required_files) and any(
+                (snapshot_dir / name).exists() for name in weight_files
+            ):
+                return str(snapshot_dir)
+
+        return model_id
+
 
 def load_rgb_image(path: str) -> np.ndarray:
     """Load an image from disk as RGB."""
     image_bgr = cv2.imread(path, cv2.IMREAD_COLOR)
     if image_bgr is None:
         raise FileNotFoundError(path)
-    return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    return np.ascontiguousarray(cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB))
 
 
 def draw_detections(
