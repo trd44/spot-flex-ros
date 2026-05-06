@@ -431,7 +431,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'place_hand_forward_m',
-            default_value='0.30',
+            default_value='0.50',
             description='Forward hand motion in the body frame after the body approach, in meters.',
         ),
         DeclareLaunchArgument(
