@@ -80,6 +80,8 @@ Edit `.env` with the Spot network and login configuration when hardware access i
 
 This is the default path. Open the repository in VS Code and choose **Reopen in Container**. VS Code uses `.devcontainer/Dockerfile` to build the container.
 
+If this method is causing issues try Option 2.
+
 ### Option 2: Use The Preserved Docker Hub Image
 
 To use a preserved container image instead of rebuilding the dev container from the Dockerfile:
