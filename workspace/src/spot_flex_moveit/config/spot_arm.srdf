@@ -38,11 +38,11 @@
   </group_state>
 
   <group_state name="open" group="spot_gripper">
-    <joint name="arm_f1x" value="0.0"/>
+    <joint name="arm_f1x" value="-1.57"/>
   </group_state>
 
   <group_state name="closed" group="spot_gripper">
-    <joint name="arm_f1x" value="-1.57"/>
+    <joint name="arm_f1x" value="0.0"/>
   </group_state>
 
   <end_effector name="hand" parent_link="arm_link_wr1" group="spot_gripper"/>
@@ -57,5 +57,7 @@
   <disable_collisions link1="arm_link_wr1"   link2="arm_link_fngr" reason="Adjacent"/>
   <disable_collisions link1="arm_link_sh0"   link2="arm_link_hr0"  reason="Never"/>
   <disable_collisions link1="body"           link2="arm_link_sh1"  reason="Never"/>
+  <disable_collisions link1="arm_link_sh0"   link2="arm_link_wr1"  reason="Default stow pose"/>
+  <disable_collisions link1="arm_link_hr0"   link2="arm_link_wr1"  reason="Default stow pose"/>
 
 </robot>

@@ -3,9 +3,10 @@ import yaml
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import RegisterEventHandler, TimerAction
+from launch.actions import DeclareLaunchArgument, RegisterEventHandler, TimerAction
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import Command, FindExecutable, PathJoinSubstitution
+from launch.substitutions import Command, FindExecutable, LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -18,6 +19,9 @@ def load_yaml(path: str) -> dict:
 
 def generate_launch_description():
     pkg = get_package_share_directory('spot_flex_moveit')
+    use_sim_time = LaunchConfiguration('use_sim_time')
+    launch_rviz = LaunchConfiguration('launch_rviz')
+    use_mock_control = LaunchConfiguration('use_mock_control')
 
     robot_description_content = ParameterValue(
         Command([
@@ -69,14 +73,16 @@ def generate_launch_description():
     robot_state_publisher = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[robot_description],
+        parameters=[robot_description, {'use_sim_time': use_sim_time}],
+        condition=IfCondition(use_mock_control),
         output='screen',
     )
 
     ros2_control_node = Node(
         package='controller_manager',
         executable='ros2_control_node',
-        parameters=[robot_description, ros2_ctrl_yaml],
+        parameters=[robot_description, ros2_ctrl_yaml, {'use_sim_time': use_sim_time}],
+        condition=IfCondition(use_mock_control),
         output='screen',
     )
 
@@ -84,6 +90,7 @@ def generate_launch_description():
         package='controller_manager',
         executable='spawner',
         arguments=['joint_state_broadcaster'],
+        condition=IfCondition(use_mock_control),
         output='screen',
     )
 
@@ -91,6 +98,7 @@ def generate_launch_description():
         package='controller_manager',
         executable='spawner',
         arguments=['arm_controller'],
+        condition=IfCondition(use_mock_control),
         output='screen',
     )
 
@@ -98,14 +106,17 @@ def generate_launch_description():
         package='controller_manager',
         executable='spawner',
         arguments=['gripper_controller'],
+        condition=IfCondition(use_mock_control),
         output='screen',
     )
 
     spawn_arm_after_jsb = RegisterEventHandler(
-        OnProcessExit(target_action=spawn_jsb, on_exit=[spawn_arm_ctrl])
+        OnProcessExit(target_action=spawn_jsb, on_exit=[spawn_arm_ctrl]),
+        condition=IfCondition(use_mock_control),
     )
     spawn_gripper_after_arm = RegisterEventHandler(
-        OnProcessExit(target_action=spawn_arm_ctrl, on_exit=[spawn_gripper_ctrl])
+        OnProcessExit(target_action=spawn_arm_ctrl, on_exit=[spawn_gripper_ctrl]),
+        condition=IfCondition(use_mock_control),
     )
 
     move_group = Node(
@@ -120,7 +131,7 @@ def generate_launch_description():
             trajectory_execution,
             moveit_controllers,
             planning_scene_monitor_parameters,
-            {'use_sim_time': False},
+            {'use_sim_time': use_sim_time},
         ],
         output='screen',
     )
@@ -137,11 +148,20 @@ def generate_launch_description():
             joint_limits,
             planning_pipeline,
             moveit_controllers,
+            {'use_sim_time': use_sim_time},
         ],
+        condition=IfCondition(launch_rviz),
         output='log',
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument('use_sim_time', default_value='false'),
+        DeclareLaunchArgument('launch_rviz', default_value='true'),
+        DeclareLaunchArgument(
+            'use_mock_control',
+            default_value='true',
+            description='Launch mock ros2_control controllers for the standalone MoveIt demo.',
+        ),
         robot_state_publisher,
         ros2_control_node,
         spawn_jsb,

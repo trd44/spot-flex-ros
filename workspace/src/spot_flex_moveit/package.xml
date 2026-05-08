@@ -22,6 +22,7 @@
   <exec_depend>moveit_py</exec_depend>
   <exec_depend>rviz2</exec_depend>
   <exec_depend>moveit_ros_visualization</exec_depend>
+  <exec_depend>spot_flex_control</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

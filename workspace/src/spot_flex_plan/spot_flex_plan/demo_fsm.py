@@ -87,7 +87,7 @@ def _loosen_handle_grip_service():
         req = SetGripperAngle.Request()
         req.gripper_angle = float(target_angle)
         return req
-    return ServiceState(SetGripperAngle, '/spot/set_gripper_angle', build)
+    return ServiceState(SetGripperAngle, 'set_gripper_angle', build)
 
 
 def _action_feedback(action_name):

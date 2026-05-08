@@ -16,6 +16,8 @@
   <depend>nav2_msgs</depend>
 
   <exec_depend>ros2launch</exec_depend>
+  <exec_depend>spot_flex_nav</exec_depend>
+  <exec_depend>spot_flex_moveit</exec_depend>
   <exec_depend>yasmin</exec_depend>
   <exec_depend>yasmin_ros</exec_depend>
   <exec_depend>python3-yaml</exec_depend>

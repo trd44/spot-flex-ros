@@ -104,6 +104,8 @@ def generate_launch_description():
     urdf_file = str(spot_model_dir / 'model.urdf')
     with open(urdf_file, 'r') as infp:
         robot_desc = infp.read()
+    mesh_uri_prefix = (spot_model_dir / 'meshes').as_uri() + '/'
+    robot_desc = robot_desc.replace('package://spot_description/meshes/', mesh_uri_prefix)
 
     robot_state_publisher = Node(
         package='robot_state_publisher',
@@ -167,6 +169,22 @@ def generate_launch_description():
         }]
     )
 
+    lidar_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='sim_lidar_static_tf',
+        arguments=[
+            '--x', '0.223',
+            '--y', '0.0',
+            '--z', '0.11635',
+            '--roll', '0.0',
+            '--pitch', '0.0',
+            '--yaw', '0.0',
+            '--frame-id', 'base_link',
+            '--child-frame-id', 'lidar_link',
+        ],
+    )
+
     # RViz
     rviz = Node(
         package='rviz2',
@@ -191,6 +209,7 @@ def generate_launch_description():
         gz_sim,
         bridge,
         robot_state_publisher,
+        lidar_tf,
         quadruped_controller_node,
         pointcloud_transform,
         rviz,

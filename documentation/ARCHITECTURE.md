@@ -4,132 +4,135 @@ Git repo: https://github.com/trd44/spot-flex-ros
 
 ## Overview
 
-Expand the Boston Dynamics Spot robot's capabilities to execute multi-step plans: navigating to locations, pushing obstacles, opening cabinets, retrieving items, and delivering them. The system uses trained manipulation policies for cabinet opening and box pushing.
+Spot Flex is a ROS 2 mobile manipulation system for navigating to task locations, detecting objects and cabinet handles, pushing obstacles, opening a cabinet, retrieving an item, and placing it at a drop-off location.
 
-**Bonus:** Demonstrate manipulation transferability with a Kinova robot.
+The primary ROS architecture uses Nav2 for navigation and MoveIt for arm planning. The hardware demo can switch to Spot-native GraphNav and Spot SDK arm/gripper services when those backends are more reliable on the available robot.
 
 ## Package Organization
 
 | Package | Type | Description |
 |---|---|---|
-| `spot_ros2` | External | Boston Dynamic's official ROS2 driver |
-| `spot_flex_msgs` | Custom | Custom action/service/message definitions |
-| `spot_flex_plan` | Custom | Task orchestration — conductor node + planner |
-| `spot_flex_perception` | Custom | Object/cabinet detection and localization |
-| `spot_flex_control` | Custom | Navigation wrapper, arm control, policy server |
-| `spot_flex_ui` | Custom | Terminal UI for sending commands |
+| `spot_ros2` | External | Boston Dynamics ROS 2 driver and Spot SDK bridge |
+| `spot_gazebo_ros2` | External | Gazebo Spot model and simulation assets |
+| `spot_flex_msgs` | Custom | Custom actions and services |
+| `spot_flex_plan` | Custom | Fetch task conductor and launch files |
+| `spot_flex_perception` | Custom | Object, box, and cabinet-handle perception actions |
+| `spot_flex_nav` | Custom | Nav2 launch files, depth-to-scan, mapping, named locations, GraphNav helpers |
+| `spot_flex_moveit` | Custom | MoveIt arm configuration and mock arm demo |
+| `spot_flex_control` | Custom | Navigation adapter, MoveIt service bridge, policy server |
+| `spot_flex_sim` | Custom | Gazebo/RViz/noVNC simulation and Nav2 demo launch |
+| `spot_flex_mocks` | Custom | Mock servers for development without hardware |
+| `spot_flex_ui` | Custom | Prototype command UI |
 
 ## System Architecture
-![img](images/arch.png)
 
-## Messages, Services, and Actions
+![Architecture diagram](images/arch.png)
 
-### Custom (spot_flex_msgs)
+```text
+FetchItem action
+  -> spot_flex_plan conductor FSM
+  -> spot_flex_control/nav_node
+       -> Nav2 NavigateToPose
+       -> Spot GraphNav fallback
+  -> spot_flex_perception actions
+  -> spot_flex_control/policy_server_node
+  -> spot_flex_control/arm_node
+       -> MoveIt move_group
+       -> Spot SDK arm services fallback
+```
 
-| Interface | Type | Description |
+## Main Interfaces
+
+### Custom Actions
+
+| Interface | Server | Description |
 |---|---|---|
-| `/fetch_object` | Action | Goal: item_name, location. Feedback: current_step, progress. Result: success, message |
-| `/get_plan` | Service | Request: task, item, location. Response: action_sequence[] |
-| `/find_object` | Action | Goal: object_name. Result: found, object_pose (PoseStamped) |
-| `/execute_policy` | Action | Goal: policy_name, target_pose. Feedback: progress. Result: success |
+| `/fetch_item` | `spot_flex_plan/conductor_node` | Full fetch flow from the configured start state |
+| `/fetch_from_cabinet` | `spot_flex_plan/conductor_node` | Fetch flow starting after the box has already been moved |
+| `/fetch_from_open_cabinet` | `spot_flex_plan/conductor_node` | Fetch flow starting after the cabinet has already been opened |
+| `/find_box_grasp_point` | `spot_flex_perception/perception_server_node` | Detects a box-edge grasp pixel |
+| `/find_cabinet_handle` | `spot_flex_perception/perception_server_node` | Detects a cabinet-handle pixel |
+| `/find_object` | `spot_flex_perception/perception_server_node` | Detects a named object pixel |
+| `/execute_policy` | `spot_flex_control/policy_server_node` | Runs manipulation policies such as pushing, placing, and cabinet opening |
+| `/go_to` | `spot_flex_control/nav_node` | Common navigation action that routes to Nav2, trajectory, or GraphNav |
 
-### From spot_ros2
-#### Actions
-| Name | Use |
-|---|---|
-| `/robot_command` | can specify almost any command but complex to fill out |
-| `/mainpulation` | can specify almost any arm command but complex to fill out |
-| `/navigate_to` | go to a specific waypoint |
-| `/trajectory` | navigate through multiple waypoints |
+### MoveIt Arm Services
 
-#### Services
-| Name | Use |
-|---|---|
-| `/arm_carry` | position arm in carry pose |
-| `/arm_stow`, `/arm_unstow` | toggle arm stow state |
-| `/open_gripper`, `/close_gripper` | toggle gripper open/closed state |
-| `/dock` | dock the spot |
-| `/estop/` | virtual estop commands (options: gentle, hard, release)  |
-| `/graph_nav` | mapping and localization commands |
+These services are exposed under `/moveit_spot` when the MoveIt service bridge is enabled:
 
-#### Topics
-| Name | Use |
+| Interface | Description |
 |---|---|
-| `/arm_joint_commands` | publish joint angles to this topic to command them |
-| `/body_pose` | move pody without walking |
-| `/status/` | various useful statuses |
+| `/moveit_spot/arm_unstow` | Move arm to the ready pose |
+| `/moveit_spot/arm_stow` | Move arm to the stowed pose |
+| `/moveit_spot/arm_carry` | Move arm to the carry pose |
+| `/moveit_spot/open_gripper` | Open gripper |
+| `/moveit_spot/close_gripper` | Close gripper |
+| `/moveit_spot/set_gripper_angle` | Spot-compatible gripper angle service |
+| `/moveit_spot/pose_goal` | `PoseStamped` topic for frame-relative MoveIt pose goals |
 
-### From Nav2
-| Name | Use |
-|---|---|
-| `/go_to` | go to a specified location given as a coordinate in vision frame |
-| `/adjust` | dx,dy,dyaw command for fine position adjustments |
+### Spot-Native Fallback Interfaces
 
-### From MoveIt!
-| Name | Use |
+| Interface | Description |
 |---|---|
-| `/go_to_eef_pose` | can specify almost any command but complex to fill out |
-| `/go_to_joint_pose` | can specify almost any arm command but complex to fill out |
-| `/close_gripper` | go to a specific waypoint |
-| `/open_gripper` | navigate through multiple waypoints |
+| `/spot/navigate_to` | GraphNav waypoint navigation |
+| `/spot/trajectory` | Body trajectory command |
+| `/spot/arm_stow`, `/spot/arm_unstow`, `/spot/arm_carry` | Spot SDK arm services |
+| `/spot/open_gripper`, `/spot/close_gripper`, `/spot/set_gripper_angle` | Spot SDK gripper services |
+| `/spot/arm_pose_commands` | `PoseStamped` topic for Spot SDK hand pose commands |
+| `/spot/grasp_pixel` | Spot SDK image-pixel grasp service |
+| `/spot/dock` | Docking service |
 
 ## Node Descriptions
 
-### UINode (spot_flex_ui)
-- **Description:** Interface for the user to interact with the robot. Will basically call `/fetch_item` with some arguments that will be sent to the conductor node to be executed. Some lower level commands will be implemented too for debugging purposes. This will ideally be a GUI.
+### Conductor Node (`spot_flex_plan`)
 
-### ConductorNode (spot_flex_plan)
-- **Description:** Handles planning and execution of the `/fetch_item` action.
-- **Action servers:** `/fetch_item`
-- **Member variables:** `TaskPlanner` instance, `current_plan` (list of steps), `current_step_index`, `robot_state` ex. dict (arm_stowed, holding_item, current_pose)
-- **Functions:** `_execute_step()` dispatches each ActionStep to the right subsystem, `_do_navigate()`, `_do_perceive()`, `_do_policy()`, `_do_grasp()`, `_do_place()`
+Hosts the high-level fetch actions and executes a YASMIN finite state machine from `spot_flex_plan/demo_fsm.py`.
 
-#### Task Planning
-The conductor builds a YASMIN finite state machine (`spot_flex_plan/demo_fsm.py`) per goal. Each state wraps an action client or service client (nav, perception, policy, spot driver). Waypoints come from `spot_flex_plan/config/demo_waypoints.yaml`. The `spot_flex_mocks` package provides drop-in mock servers so the FSM runs end-to-end without hardware (`ros2 launch spot_flex_plan demo.launch.py`). The FSM can later be swapped for a behavior tree or PDDL planner.
+The FSM calls navigation, perception, policy, and arm/gripper services in sequence. Waypoint data comes from `spot_flex_plan/config/demo_waypoints.yaml`.
 
-##### Example: Fetch Item from Cabinet
+### Nav Node (`spot_flex_control`)
 
-1. **Navigate** to cabinet location → calls `/go_to` on nav node → calls spot_ros2 `/navigate_to`
-2. **Perceive cabinet** handle → calls `/find_object` with argument cabinet on perception node → runs OWL-ViT on camera image
-3. **Adjust position** to align with handle → calls `/adjust` on nav node
-4. **Open cabinet** → calls `/execute_policy` with "open_cabinet" → policy server streams joint commands
-5. **Perceive item** inside → calls `/find_object` on perception node
-6. **Grasp item** → arm node plans and executes grasp via spot_ros2
-7. **Arm carry** → calls spot_ros2 `/arm_carry`
-8. **Navigate** to dropoff → `/go_to`
-9. **Perceive dropoff** → `/find_object` with the argument table
-10. **Place item** → arm node moves to place pose, opens gripper
-11. **Arm stow** → calls spot_ros2 `/arm_stow`
+Hosts `/go_to` as a common navigation action. The selected backend is controlled by the `backend` parameter:
 
+| Backend | Downstream interface |
+|---|---|
+| `nav2` | `nav2_msgs/action/NavigateToPose` |
+| `trajectory` | `spot_msgs/action/Trajectory` |
+| `graphnav` | `spot_msgs/action/NavigateTo` |
 
-### Perception Node (spot_flex_perception)
-- **Description:** Handles perception with models like OWL, SAM and/or YOLO
-- **Action servers:** `/find_object`
-- **Member variables:** `ObjectDetector` instance, latest RGB/depth images (numpy arrays), camera intrinsics
-- **Functions:** `detect(image, label)` returns bounding boxes and confidence values
+### Perception Server (`spot_flex_perception`)
 
+Subscribes to the configured RGB image topic and exposes perception actions for box grasp points, cabinet handles, and named objects. It can optionally call Spot gripper and pixel-grasp services around perception steps.
 
-### Nav Node (nav2 or spot_flex_control as a fallback)
-- **Description:** Handles navigation 
-- **Action servers:** `/go_to`, `/adjust/(dx,dy,dyaw)`
-- **Note:** Will figure this out in the next homework.
+### Policy Server (`spot_flex_control`)
 
-### Arm Node (MoveIt! or spot_flex_control as a fallback)
-- **Description:** Handles arm control (except for policy execution)
-- **Member variables:** gripper state (open/closed), arm state (stowed/active), joint command publisher
-- **Actions and Services:** `/open_gripper`, `/close_gripper`, `/arm_stow`, `/arm_unstow` services, `send_joint_command(positions)`
+Hosts `/execute_policy`. It runs manipulation flows for box pushing, cabinet opening, and placing. The node publishes body velocity and arm pose commands and can call Spot or MoveIt-compatible arm services.
 
-### Policy Server Node (spot_flex_control)
-- **Description:** Loads and executes the pre-trained policies I have learned.
-- **Action Server:** `/execute_policy`, runs policy loop publishing eef and body commands
-- **Methods:**`start(policy_name)`, `step(joint_state, image) -> PolicyOutput`, `stop()`
+### MoveIt Arm Node (`spot_flex_control`)
+
+Provides a small service bridge from task-level arm commands to MoveIt `/move_action`. It supports named arm states, gripper states, gripper angle compatibility, and `PoseStamped` pose goals.
+
+### Simulation (`spot_flex_sim`)
+
+Launches Gazebo, ROS/Gazebo bridges, robot state publishing, RViz, and the Nav2 demo. The default Nav2 simulation uses odom-frame navigation for a stable demonstration; SLAM Toolbox can be enabled explicitly.
+
+## Main Launch Paths
+
+| Launch | Purpose |
+|---|---|
+| `ros2 launch spot_flex_sim nav2_demo.launch.py` | Gazebo + Nav2 simulation demo |
+| `ros2 launch spot_flex_moveit moveit_demo.launch.py` | MoveIt mock arm demo |
+| `ros2 launch spot_flex_plan demo.launch.py` | Mock task demo without hardware |
+| `ros2 launch spot_flex_plan hardware_demo.launch.py nav_backend:=nav2 launch_nav2:=true launch_moveit:=true` | ROS-native hardware path with Nav2 and MoveIt |
+| `ros2 launch spot_flex_plan hardware_demo.launch.py nav_backend:=graphnav arm_service_prefix:=/spot` | Spot-native fallback path |
 
 ## External Tools and Libraries
 
-- **spot_ros2** — ROS2 driver for Boston Dynamics Spot
-- Nav2 — navigation message interfaces
-- MoveIt! - Arm planner and control
-- OWL-ViT - open-vocabulary object detection
-- Segment Anything - Object segementation and edge detection
-- YOLO - higher frequency object detection
-- Docker / VS Code Dev COntainers
+- `spot_ros2` and Boston Dynamics Spot SDK
+- Nav2
+- MoveIt 2
+- Gazebo / Ignition
+- OWL-ViT
+- Segment Anything
+- YOLO / color-based perception utilities
+- Docker / VS Code Dev Containers

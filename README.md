@@ -1,7 +1,10 @@
 # spot-flex-ros
 
-ROS 2 system for extending Boston Dynamics Spot with navigation, perception, planning, and arm control.
+ROS 2 workspace for a Spot-based mobile manipulation demo using Nav2 for navigation, MoveIt for arm planning, perception actions for object localization, and a task-level conductor for fetch workflows.
 
+The primary ROS architecture is built around Nav2 and MoveIt. For hardware demonstrations, the same task stack can fall back to Spot-native GraphNav and Spot SDK arm/gripper services when those are more reliable in the available environment.
+
+## Assignments
 - Initial Implementation: c8455e4
 - Nav2 and MoveIt implemented: d71513b
 - Perception implemented: 711dcad
@@ -10,38 +13,53 @@ ROS 2 system for extending Boston Dynamics Spot with navigation, perception, pla
 
 ## Current State of the project
 
-- Nav2 is making wonky maps.
-- MoveIt seems to work fine.
-- Perception works great.
-- Supervisory control appears to make the plan but the non-working nav2 is holding everything else up.
-- Switched to GraphNav and Spots own grasp commands
-- Spot is executing the demo but in pieces, some of the ends of some actions are in a bad place to start the next action.
+- Nav2 works in simulation on a spot with a LIDAR. Can be used for SLAM and navigating. Nav2 makes heavily distorted maps on my Spot Hardware that does not have a LIDAR.
+- MoveIt controls arm in simulation and on hardware.
+- Perception (OWL ViT, Segment Anything, and Color Blob) works great.
+- Supervisory control uses a finite state machine to execute the predetermined plan. Is working great.
+- Spots native navigation and arm control work much better than Nav2 and MoveIt, so there are options to use them instead.
+- Spot is able to execute the demo in one shot (Push box out of the way, open cabinet, retrieve item, place item on dropoff table). Box pushing can get weird if the grasp fails but the spot is usually able to push it out of the way enough before losing grasp, or sometimes it pushes with its body insted. There is the option to start at different parts in the plan to test them individually. 
 
 
-## Project Structure
+## Architecture
 
-```
-workspace/src/
-├── spot_ros2/              # Boston Dynamics ROS 2 driver
-├── spot_flex_msgs/         # Custom action and service definitions
-├── spot_flex_plan/         # Task planning and execution
-├── spot_flex_perception/   # Object detection and localization
-├── spot_flex_control/      # Navigation and arm control
-├── spot_flex_moveit/       # MoveIt configuration for the arm
-├── spot_flex_sim/          # Simulation and browser GUI helpers
-└── spot_flex_ui/           # Command interface
+```text
+FetchItem action
+  -> spot_flex_plan conductor
+  -> perception actions
+  -> Nav2 navigation backend
+  -> MoveIt arm/gripper backend
+  -> optional Spot-native fallback services
 ```
 
 See [documentation/ARCHITECTURE.md](documentation/ARCHITECTURE.md) for the full system design.
 
-## External Tools and Libraries
+## Custom Packages
 
-- spot_ros2 - ROS 2 driver for Boston Dynamics Spot
-- Nav2 - navigation stack
-- MoveIt! - Arm planner and control
-- OWL-ViT - open-vocabulary object detection
-- Segment Anything - object segmentation and edge detection
-- YOLO - higher frequency object detection
+| Package | Purpose | Documentation |
+| --- | --- | --- |
+| `spot_flex_msgs` | Custom actions and services. | [README](workspace/src/spot_flex_msgs/README.md) |
+| `spot_flex_nav` | Nav2, mapping, depth-to-scan, named locations, GraphNav helpers. | [README](workspace/src/spot_flex_nav/README.md) |
+| `spot_flex_moveit` | MoveIt configuration, mock arm demo, arm/gripper services. | [README](workspace/src/spot_flex_moveit/README.md) |
+| `spot_flex_control` | Navigation backend adapter, MoveIt service bridge, policy execution. | [README](workspace/src/spot_flex_control/README.md) |
+| `spot_flex_perception` | Object, box, and cabinet-handle perception actions. | [README](workspace/src/spot_flex_perception/README.md) |
+| `spot_flex_plan` | High-level task orchestration and hardware demo launch. | [README](workspace/src/spot_flex_plan/README.md) |
+| `spot_flex_sim` | Gazebo, RViz, noVNC, and simulation Nav2 launch files. | [README](workspace/src/spot_flex_sim/README.md) |
+| `spot_flex_mocks` | Mock servers for development without hardware. | [README](workspace/src/spot_flex_mocks/README.md) |
+| `spot_flex_ui` | Operator-facing command node. | [README](workspace/src/spot_flex_ui/README.md) |
+
+External packages in the workspace include `spot_ros2` for the Boston Dynamics ROS 2 driver and `spot_gazebo_ros2` for Gazebo assets.
+
+## Dependencies
+
+Primary frameworks and tools:
+
+- ROS 2 Humble
+- Nav2
+- MoveIt 2
+- Gazebo Fortress / Ignition
+- Boston Dynamics `spot_ros2`
+- OWL-ViT / perception model tooling
 - Docker / VS Code Dev Containers
 
 ## Development Setup
@@ -49,285 +67,121 @@ See [documentation/ARCHITECTURE.md](documentation/ARCHITECTURE.md) for the full 
 Requires Docker and VS Code with the Dev Containers extension.
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/yourusername/spot-flex-ros.git
+git clone https://github.com/trd44/spot-flex-ros.git
 cd spot-flex-ros
+cp .env_example .env
+```
 
-# 2. Copy and edit credentials
-cp .env_example .env # edit .env with the actual Spot IP and password
+Edit `.env` with the Spot network and login configuration when hardware access is required.
 
-# 3. Open in VS Code, then Reopen in Container
+Open the repository in VS Code and choose **Reopen in Container**.
 
-# 4. Inside the container, build the workspace:
+Inside the container:
+
+```bash
 cd /repo/workspace
+source /opt/ros/humble/setup.bash
 colcon build --symlink-install
 source install/setup.bash
-
-# Run nodes
 ```
+
+Perception model setup is documented in [workspace/model_cache/README.md](workspace/model_cache/README.md). That cache includes the OWLv2 Hugging Face model and the Segment Anything checkpoint used by `spot_flex_perception`.
+
+## Hardware Demo With Nav2 And MoveIt
+
+The ROS-native hardware path enables Nav2 and MoveIt:
+
+```bash
+cd /repo/workspace
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+
+ros2 launch spot_flex_plan hardware_demo.launch.py \
+  nav_backend:=nav2 \
+  launch_nav2:=true \
+  nav2_map:=/repo/workspace/src/spot_flex_nav/maps/my_room.yaml \
+  launch_moveit:=true \
+  moveit_use_mock_control:=false \
+  arm_service_prefix:=/moveit_spot \
+  perception_open_gripper_service:=/moveit_spot/open_gripper
+```
+
+Send the full task goal:
+
+```bash
+ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem \
+  "{item_name: 'soda can'}" --feedback
+```
+
+Task launch options and alternate entry points are documented in [spot_flex_plan](workspace/src/spot_flex_plan/README.md).
+
+## Spot-Native Hardware Fallback
+
+Spot-native GraphNav and SDK arm services can be used when hardware Nav2 or MoveIt is not stable enough for a live run.
+
+Typical terminal layout:
+
+```bash
+# Terminal 1
+bash /repo/workspace/launch_spot.sh
+
+# Terminal 2
+ros2 launch spot_flex_plan hardware_demo.launch.py \
+  nav_backend:=graphnav \
+  launch_nav2:=false \
+  launch_moveit:=false \
+  arm_service_prefix:=/spot
+
+# Terminal 3
+ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem \
+  "{item_name: 'soda can'}" --feedback
+```
+
+GraphNav map download, localization, and named waypoint commands are documented in [spot_flex_nav](workspace/src/spot_flex_nav/README.md).
+
+## Primary Simulation Demo
+
+The simulation demo starts Gazebo, bridge nodes, Nav2, and RViz:
+
+```bash
+cd /repo/workspace
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch spot_flex_sim nav2_demo.launch.py headless:=false rviz:=true
+```
+
+Send a Nav2 goal:
+
+```bash
+ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+  "{pose: {header: {frame_id: odom}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}"
+```
+
+Additional simulation and noVNC commands are documented in [spot_flex_sim](workspace/src/spot_flex_sim/README.md).
+
+## Primary MoveIt Demo
+
+The MoveIt demo starts a mock Spot arm, mock controllers, `move_group`, and optional RViz:
+
+```bash
+cd /repo/workspace
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch spot_flex_moveit moveit_demo.launch.py launch_rviz:=true
+```
+
+Low-level MoveIt arm, gripper, and pose commands are documented in [spot_flex_moveit](workspace/src/spot_flex_moveit/README.md).
 
 ## Perception
 
-Models are cached in the container at `/opt/spot_flex_model_cache`. The current container may also use `/repo/workspace/model_cache`.
-
-Offline tests:
+Start the perception server:
 
 ```bash
-cd /repo/workspace
-PYTHONPATH=/repo/workspace/src/spot_flex_perception:$PYTHONPATH python3 -m spot_flex_perception.test_owl
-PYTHONPATH=/repo/workspace/src/spot_flex_perception:$PYTHONPATH python3 -m spot_flex_perception.test_box_grasp
-PYTHONPATH=/repo/workspace/src/spot_flex_perception:$PYTHONPATH python3 -m spot_flex_perception.test_cabinet_handle
-```
-
-Action server:
-
-```bash
-cd /repo/workspace
-source install/setup.bash
 ros2 run spot_flex_perception perception_server_node
 ```
 
-Action calls:
+Perception action examples and offline detector checks are documented in [spot_flex_perception](workspace/src/spot_flex_perception/README.md).
 
-```bash
-ros2 action send_goal /find_box_grasp_point spot_flex_msgs/action/FindBoxGraspPoint "{side: left}" --feedback
-ros2 action send_goal /find_cabinet_handle spot_flex_msgs/action/FindCabinetHandle "{}" --feedback
-ros2 action send_goal /find_object spot_flex_msgs/action/FindObject "{object_name: box}" --feedback
-```
+## Network Notes
 
-### noVNC Browser GUI
-
-For macOS and container setups, the browser path is more reliable than direct X11 for Gazebo and RViz.
-
-Start the virtual display:
-
-```bash
-cd /repo/workspace
-./src/spot_flex_sim/scripts/start_virtual_display.sh
-source ./src/spot_flex_sim/scripts/virtual_display_env.sh
-```
-
-Launch simulation tools on that display:
-
-```bash
-ros2 launch spot_flex_sim simulation.launch.py headless:=false rviz:=true
-```
-
-Then forward container port `6080` and open:
-
-```text
-http://localhost:6080/vnc.html?autoconnect=1&resize=scale
-```
-
-There is also a wrapper that starts the display and launches Gazebo in one step:
-
-```bash
-cd /repo/workspace
-./src/spot_flex_sim/scripts/launch_gazebo_vnc.sh
-```
-
-The wrapper opens Gazebo and RViz on the same desktop by default. To disable RViz:
-
-```bash
-./src/spot_flex_sim/scripts/launch_gazebo_vnc.sh rviz:=false
-```
-
-Stop the virtual display:
-
-```bash
-./src/spot_flex_sim/scripts/stop_virtual_display.sh
-```
-
-### MoveIt Spot Arm
-
-This launch starts a mock Spot arm with `ros2_control`, `move_group`, and RViz.
-
-If using noVNC, start the virtual display first:
-
-```bash
-cd /repo/workspace
-./src/spot_flex_sim/scripts/start_virtual_display.sh
-source ./src/spot_flex_sim/scripts/virtual_display_env.sh
-```
-
-Build and launch:
-
-```bash
-cd /repo/workspace
-rosdep install --from-paths src --ignore-src -r -y --skip-keys "bosdyn bosdyn_msgs spot_wrapper bosdyn_cmake_module"
-colcon build --symlink-install --packages-select spot_flex_moveit spot_flex_control
-source /opt/ros/humble/setup.bash
-source /repo/workspace/install/setup.bash
-ros2 launch spot_flex_moveit spot_arm_moveit.launch.py
-```
-
-Optional second shell:
-
-```bash
-source /opt/ros/humble/setup.bash
-source /repo/workspace/install/setup.bash
-ros2 run spot_flex_control arm_node
-```
-
-### GraphNav Mapping
-
-For hardware demos, prefer Spot's native GraphNav over the camera-based Nav2 map. The workflow that worked best was:
-record with the controller/tablet, download the active GraphNav map to the container, then use ROS to localize and
-navigate to named waypoints.
-
-Record a small connected graph for the demo locations. Add named waypoints such as `box`, `cabinet`, `table`, and
-`dock`. After recording, download the currently loaded GraphNav map from Spot:
-
-```bash
-cd /repo/workspace
-colcon build --symlink-install --packages-select spot_flex_nav
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 run spot_flex_nav graphnav_download_map \
-  --output /repo/workspace/maps/demo.walk \
-  --force
-```
-
-The saved map folder should look like this:
-
-```text
-demo.walk/
-  graph
-  waypoint_snapshots/
-  edge_snapshots/
-```
-
-After the map is saved, start the Spot driver in one shell:
-
-```bash
-cd /repo/workspace
-bash ./launch_spot.sh
-```
-
-In a second shell, list/upload the map and localize:
-
-```bash
-cd /repo/workspace
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-
-ros2 service call /spot/list_graph spot_msgs/srv/ListGraph \
-  "{upload_filepath: '/repo/workspace/maps/demo.walk'}"
-
-ros2 service call /spot/graph_nav_set_localization spot_msgs/srv/GraphNavSetLocalization \
-  "{method: 'fiducial', waypoint_id: ''}"
-```
-
-If no fiducial is visible, stand Spot near a known waypoint and localize by waypoint:
-
-```bash
-ros2 service call /spot/graph_nav_set_localization spot_msgs/srv/GraphNavSetLocalization \
-  "{method: 'waypoint', waypoint_id: 'dock'}"
-```
-
-Simple navigation sequence:
-
-```bash
-ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
-  "{waypoint_id: 'box'}" --feedback
-
-ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
-  "{waypoint_id: 'cabinet'}" --feedback
-
-ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
-  "{waypoint_id: 'table'}" --feedback
-
-ros2 action send_goal /spot/navigate_to spot_msgs/action/NavigateTo \
-  "{waypoint_id: 'dock'}" --feedback
-
-ros2 service call /spot/dock spot_msgs/srv/Dock "{dock_id: 521}"
-```
-
-Use a full waypoint id, short waypoint id, or unique waypoint annotation name for `waypoint_id`. The dock service uses
-the numeric dock id, not the GraphNav waypoint name.
-
-### Camera-Based Nav2
-
-The `spot_flex_nav` package provides the no-lidar navigation path. It converts a depth camera stream into a synthetic
-2D scan, then runs Nav2 with SLAM Toolbox:
-
-```bash
-cd /repo/workspace
-source install/setup.bash
-ros2 launch spot_flex_nav mapping.launch.py
-```
-
-Drive during mapping with arrow keys:
-
-```bash
-ros2 run spot_flex_nav teleop_arrows
-```
-
-Save the map:
-
-```bash
-ros2 run nav2_map_server map_saver_cli -f /repo/workspace/src/spot_flex_nav/maps/test_room
-```
-
-Run on a saved map:
-
-```bash
-ros2 launch spot_flex_nav navigation.launch.py map:=/repo/workspace/src/spot_flex_nav/maps/test_room.yaml
-```
-
-Tag and revisit named locations:
-
-```bash
-ros2 run spot_flex_nav tag_location cabinet --file /repo/workspace/src/spot_flex_nav/locations/test_room.yaml
-ros2 run spot_flex_nav go_to_location cabinet --file /repo/workspace/src/spot_flex_nav/locations/test_room.yaml
-```
-
-For the real robot, keep the same Nav2 stack but switch to wall-clock time and point the depth converter at the real
-Spot RGB-D topics. The exact topic names depend on the driver configuration, but this is the expected shape:
-
-```bash
-ros2 launch spot_flex_nav mapping.launch.py \
-  use_sim_time:=false \
-  depth_topic:=/spot/depth/frontleft/image \
-  camera_info_topic:=/spot/depth/frontleft/camera_info
-```
-
-If the real driver already publishes the odometry TF from `odom`/`vision` to `base_link`, launch with
-`start_odom_tf:=false` and set `odom_frame` in the Nav2 config to match the driver frame.
-
-## spot_flex_plan
-
-Mock
-```bash
-ros2 launch spot_flex_plan demo.launch.py.  # Terminal 1
-
-ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem   "{item_name: 'can', location: 'cabinet'}" --feedback  # Terminal 2
-```
-
-## Network
-
-Spot's default IP is `192.168.80.3` on its own network.
-
-Terminal 1
-bash /repo/workspace/launch_spot.sh
-
-Terminal 2
-ros2 launch spot_flex_plan hardware_demo.launch.py
-
-Termianl 3
-
-Full demo:
-ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem   "{item_name: 'soda can'}" --feedback
-
-Start with box pushed out of the way
-ros2 action send_goal /fetch_from_cabinet spot_flex_msgs/action/FetchItem "{item_name: 'soda can'}" --feedback
-
-Start with cabinet open
-ros2 action send_goal /fetch_from_open_cabinet spot_flex_msgs/action/FetchItem "{item_name: 'can'}" --feedback
-
-
-spot-estop
-spot-dock
-spot-interrupt
-spot-return-dock
+Spot commonly uses `192.168.80.3` on its own network. Hardware credentials and connection settings should be configured in `.env` and the Spot driver configuration used by `launch_spot.sh`.

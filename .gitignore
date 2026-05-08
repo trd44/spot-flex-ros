@@ -32,10 +32,13 @@ CMakeLists.txt.user
 
 # Model weights (too large for git)
 *.pt
-*.pth
+# *.pth
 *.onnx
 
 *.pdf
+*.log
 
-workspace/src/spot_flex_perception/spot_flex_perception/sdk_code
-workspace/model_cache/*
+flex_spot/
+workspace/model_cache/huggingface/*
+workspace/model_cache/sam/*
+workspace/perception_debug/*

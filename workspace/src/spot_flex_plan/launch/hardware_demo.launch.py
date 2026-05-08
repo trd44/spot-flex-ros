@@ -27,6 +27,17 @@ def generate_launch_description():
     waypoints_file = LaunchConfiguration('waypoints_file')
     box_grasp_side = LaunchConfiguration('box_grasp_side')
     nav_backend = LaunchConfiguration('nav_backend')
+    launch_nav2 = LaunchConfiguration('launch_nav2')
+    nav2_map = LaunchConfiguration('nav2_map')
+    nav2_params_file = LaunchConfiguration('nav2_params_file')
+    nav2_action = LaunchConfiguration('nav2_action')
+    arm_service_prefix = LaunchConfiguration('arm_service_prefix')
+    launch_moveit = LaunchConfiguration('launch_moveit')
+    moveit_use_sim_time = LaunchConfiguration('moveit_use_sim_time')
+    moveit_launch_rviz = LaunchConfiguration('moveit_launch_rviz')
+    moveit_use_mock_control = LaunchConfiguration('moveit_use_mock_control')
+    moveit_launch_arm_services = LaunchConfiguration('moveit_launch_arm_services')
+    moveit_arm_namespace = LaunchConfiguration('moveit_arm_namespace')
     policy_dry_run = LaunchConfiguration('policy_dry_run')
     policy_use_learned = LaunchConfiguration('policy_use_learned')
     push_model_dir = LaunchConfiguration('push_model_dir')
@@ -158,6 +169,61 @@ def generate_launch_description():
             'nav_backend',
             default_value='graphnav',
             description='spot_flex_control nav backend: graphnav, trajectory, or nav2.',
+        ),
+        DeclareLaunchArgument(
+            'launch_nav2',
+            default_value='false',
+            description='Launch Nav2 localization/navigation for hardware. Use with nav_backend:=nav2.',
+        ),
+        DeclareLaunchArgument(
+            'nav2_map',
+            default_value='/repo/workspace/src/spot_flex_nav/maps/my_room.yaml',
+            description='Map YAML for hardware Nav2 localization.',
+        ),
+        DeclareLaunchArgument(
+            'nav2_params_file',
+            default_value='/repo/workspace/src/spot_flex_nav/config/nav2_params.yaml',
+            description='Nav2 params for real Spot frames and topics.',
+        ),
+        DeclareLaunchArgument(
+            'nav2_action',
+            default_value='/navigate_to_pose',
+            description='Nav2 NavigateToPose action consumed when nav_backend:=nav2.',
+        ),
+        DeclareLaunchArgument(
+            'arm_service_prefix',
+            default_value='/spot',
+            description='Arm/gripper Trigger service prefix. Use /moveit_spot with launch_moveit:=true to route the demo through MoveIt services.',
+        ),
+        DeclareLaunchArgument(
+            'launch_moveit',
+            default_value='false',
+            description='Launch MoveIt arm planning/services alongside the hardware demo.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_use_sim_time',
+            default_value='false',
+            description='Use sim time for the optional MoveIt stack.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_launch_rviz',
+            default_value='false',
+            description='Launch RViz for the optional MoveIt stack.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_use_mock_control',
+            default_value='false',
+            description='Launch mock ros2_control controllers for MoveIt. Keep false for hardware.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_launch_arm_services',
+            default_value='true',
+            description='Expose MoveIt-backed arm Trigger services.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_arm_namespace',
+            default_value='moveit_spot',
+            description='Namespace for MoveIt-backed arm services.',
         ),
         DeclareLaunchArgument(
             'policy_dry_run',
@@ -671,6 +737,43 @@ def generate_launch_description():
             condition=IfCondition(launch_spot_driver),
         ),
 
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([
+                    FindPackageShare('spot_flex_nav'),
+                    'launch',
+                    'navigation.launch.py',
+                ])
+            ),
+            launch_arguments={
+                'use_sim_time': 'false',
+                'autostart': 'true',
+                'map': nav2_map,
+                'nav2_params_file': nav2_params_file,
+                'start_depth_scan': 'false',
+                'start_odom_tf': 'false',
+            }.items(),
+            condition=IfCondition(launch_nav2),
+        ),
+
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(
+                PathJoinSubstitution([
+                    FindPackageShare('spot_flex_moveit'),
+                    'launch',
+                    'moveit_demo.launch.py',
+                ])
+            ),
+            launch_arguments={
+                'use_sim_time': moveit_use_sim_time,
+                'launch_rviz': moveit_launch_rviz,
+                'use_mock_control': moveit_use_mock_control,
+                'launch_arm_services': moveit_launch_arm_services,
+                'arm_services_namespace': moveit_arm_namespace,
+            }.items(),
+            condition=IfCondition(launch_moveit),
+        ),
+
         Node(
             package='spot_flex_plan',
             executable='conductor_node',
@@ -683,11 +786,11 @@ def generate_launch_description():
             remappings=[
                 ('undock', '/spot/undock'),
                 ('dock', '/spot/dock'),
-                ('arm_carry', '/spot/arm_carry'),
-                ('arm_stow', '/spot/arm_stow'),
-                ('open_gripper', '/spot/open_gripper'),
-                ('close_gripper', '/spot/close_gripper'),
-                ('set_gripper_angle', '/spot/set_gripper_angle'),
+                ('arm_carry', PathJoinSubstitution([arm_service_prefix, 'arm_carry'])),
+                ('arm_stow', PathJoinSubstitution([arm_service_prefix, 'arm_stow'])),
+                ('open_gripper', PathJoinSubstitution([arm_service_prefix, 'open_gripper'])),
+                ('close_gripper', PathJoinSubstitution([arm_service_prefix, 'close_gripper'])),
+                ('set_gripper_angle', PathJoinSubstitution([arm_service_prefix, 'set_gripper_angle'])),
             ],
         ),
         Node(
@@ -718,6 +821,7 @@ def generate_launch_description():
                 'waypoints_file': waypoints_file,
                 'trajectory_action': '/spot/trajectory',
                 'graphnav_action': '/spot/navigate_to',
+                'nav2_action': nav2_action,
             }],
         ),
         Node(
@@ -792,7 +896,7 @@ def generate_launch_description():
                 'prismatic_model_dir': prismatic_model_dir,
                 'prismatic_model_name': prismatic_model_name,
                 'cmd_vel_topic': '/spot/cmd_vel',
-                'trigger_service_prefix': '/spot',
+                'trigger_service_prefix': arm_service_prefix,
             }],
         ),
         Node(
