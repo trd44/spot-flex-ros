@@ -101,10 +101,10 @@ ros2 launch spot_flex_plan hardware_demo.launch.py \
   launch_nav2:=true \
   nav2_map:=/repo/workspace/src/spot_flex_nav/maps/my_room.yaml \
   launch_moveit:=true \
-  moveit_use_mock_control:=false \
-  arm_service_prefix:=/moveit_spot \
-  perception_open_gripper_service:=/moveit_spot/open_gripper
+  moveit_use_mock_control:=false
 ```
+
+With `launch_moveit:=true`, arm services, gripper services, and perception pixel grasps default to the MoveIt bridge under `/moveit_spot`. The pixel grasp bridge uses registered hand-camera depth and camera info to convert the detected 2D image pixel into a MoveIt pose goal.
 
 Send the full task goal:
 
@@ -139,7 +139,7 @@ ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem \
 
 GraphNav map download, localization, and named waypoint commands are documented in [spot_flex_nav](workspace/src/spot_flex_nav/README.md).
 
-## Primary Simulation Demo
+## Nav2 Simulation Demo
 
 The simulation demo starts Gazebo, bridge nodes, Nav2, and RViz:
 
@@ -159,7 +159,7 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
 
 Additional simulation and noVNC commands are documented in [spot_flex_sim](workspace/src/spot_flex_sim/README.md).
 
-## Primary MoveIt Demo
+## MoveIt Simulation Demo
 
 The MoveIt demo starts a mock Spot arm, mock controllers, `move_group`, and optional RViz:
 
@@ -168,6 +168,19 @@ cd /repo/workspace
 source /opt/ros/humble/setup.bash
 source install/setup.bash
 ros2 launch spot_flex_moveit moveit_demo.launch.py launch_rviz:=true
+```
+
+Send a MoveIt arm goal:
+
+```bash
+ros2 service call /moveit_spot/arm_unstow std_srvs/srv/Trigger "{}"
+```
+
+Send a MoveIt pose goal in the arm base frame:
+
+```bash
+ros2 topic pub -1 /moveit_spot/pose_goal geometry_msgs/msg/PoseStamped \
+  "{header: {frame_id: 'body'}, pose: {position: {x: 0.7, y: 0.0, z: 0.35}, orientation: {w: 1.0}}}"
 ```
 
 Low-level MoveIt arm, gripper, and pose commands are documented in [spot_flex_moveit](workspace/src/spot_flex_moveit/README.md).

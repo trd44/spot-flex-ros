@@ -18,7 +18,7 @@ source install/setup.bash
 | Executable | Purpose |
 | --- | --- |
 | `nav_node` | Converts planner navigation requests to Nav2, trajectory, or GraphNav backends. |
-| `arm_node` | Exposes MoveIt-backed arm and gripper services under a namespace such as `/moveit_spot`. |
+| `arm_node` | Exposes MoveIt-backed arm, gripper, pose, and pixel-grasp services under a namespace such as `/moveit_spot`. |
 | `policy_server_node` | Executes manipulation policies for pushing, placing, and cabinet opening. |
 | `graphnav_initializer_node` | Uploads and initializes Spot GraphNav maps for fallback navigation. |
 
@@ -53,6 +53,7 @@ Available services:
 /moveit_spot/open_gripper
 /moveit_spot/close_gripper
 /moveit_spot/set_gripper_angle
+/moveit_spot/grasp_pixel
 ```
 
 Examples:
@@ -68,6 +69,15 @@ The bridge also accepts `geometry_msgs/msg/PoseStamped` goals:
 ros2 topic pub -1 /moveit_spot/pose_goal geometry_msgs/msg/PoseStamped \
   "{header: {frame_id: 'body'}, pose: {position: {x: 0.7, y: 0.0, z: 0.35}, orientation: {w: 1.0}}}"
 ```
+
+The `grasp_pixel` service accepts the same `spot_flex_msgs/srv/GraspPixel` request used by the Spot SDK path. It projects the requested image pixel through a registered depth image and camera info, sends the resulting pose to MoveIt, then closes the gripper. The default topics are:
+
+```text
+/spot/depth_registered/hand/image
+/spot/depth_registered/hand/camera_info
+```
+
+These can be changed with the `grasp_depth_topic` and `grasp_camera_info_topic` parameters.
 
 ## Policy Server
 

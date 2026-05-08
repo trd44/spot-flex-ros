@@ -17,6 +17,9 @@ def generate_launch_description():
     use_mock_control = LaunchConfiguration('use_mock_control')
     launch_arm_services = LaunchConfiguration('launch_arm_services')
     arm_services_namespace = LaunchConfiguration('arm_services_namespace')
+    grasp_depth_topic = LaunchConfiguration('grasp_depth_topic')
+    grasp_camera_info_topic = LaunchConfiguration('grasp_camera_info_topic')
+    grasp_target_frame = LaunchConfiguration('grasp_target_frame')
 
     moveit = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(pkg, 'launch', 'spot_arm_moveit.launch.py')),
@@ -33,6 +36,11 @@ def generate_launch_description():
         name='moveit_arm_node',
         namespace=arm_services_namespace,
         output='screen',
+        parameters=[{
+            'grasp_depth_topic': grasp_depth_topic,
+            'grasp_camera_info_topic': grasp_camera_info_topic,
+            'grasp_target_frame': grasp_target_frame,
+        }],
         condition=IfCondition(launch_arm_services),
     )
 
@@ -49,6 +57,21 @@ def generate_launch_description():
             'arm_services_namespace',
             default_value='moveit_spot',
             description='Namespace for MoveIt-backed arm Trigger services.',
+        ),
+        DeclareLaunchArgument(
+            'grasp_depth_topic',
+            default_value='/spot/depth_registered/hand/image',
+            description='Registered depth image used by the MoveIt pixel-grasp bridge.',
+        ),
+        DeclareLaunchArgument(
+            'grasp_camera_info_topic',
+            default_value='/spot/depth_registered/hand/camera_info',
+            description='CameraInfo matching the registered depth image.',
+        ),
+        DeclareLaunchArgument(
+            'grasp_target_frame',
+            default_value='',
+            description='Optional frame override for projected pixel-grasp poses.',
         ),
         moveit,
         TimerAction(period=5.0, actions=[arm_services]),

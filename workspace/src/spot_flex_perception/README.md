@@ -83,4 +83,11 @@ perception_grasp_pixel_service
 perception_grasp_image_source
 ```
 
-The hardware demo can route grasping to Spot-native pixel grasp services while perception continues to provide the target pixel.
+The hardware demo can route the same perception pixel to either pixel-grasp backend:
+
+```text
+/moveit_spot/grasp_pixel
+/spot/grasp_pixel
+```
+
+When `launch_moveit:=true`, the hardware demo defaults to the MoveIt service. The MoveIt path projects the pixel through registered depth and camera info before planning the arm motion. The Spot SDK path remains available as a fallback by setting `perception_grasp_pixel_service:=/spot/grasp_pixel`.

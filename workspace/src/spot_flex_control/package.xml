@@ -14,12 +14,13 @@
   <depend>python3-scipy</depend>
   <depend>python3-sklearn</depend>
   <depend>trajectory_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>shape_msgs</depend>
   <depend>spot_flex_msgs</depend>
   <depend>spot_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>tf2_ros</depend>
-  <exec_depend condition="$SPOT_FLEX_ENABLE_MOVEIT == 1">moveit_py</exec_depend>
-  <exec_depend condition="$SPOT_FLEX_ENABLE_MOVEIT == 1">moveit_ros_planning_interface</exec_depend>
+  <depend>moveit_msgs</depend>
 
   <export>
     <build_type>ament_python</build_type>

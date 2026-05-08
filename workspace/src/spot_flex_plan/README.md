@@ -43,10 +43,10 @@ ros2 launch spot_flex_plan hardware_demo.launch.py \
   launch_nav2:=true \
   nav2_map:=/repo/workspace/src/spot_flex_nav/maps/my_room.yaml \
   launch_moveit:=true \
-  moveit_use_mock_control:=false \
-  arm_service_prefix:=/moveit_spot \
-  perception_open_gripper_service:=/moveit_spot/open_gripper
+  moveit_use_mock_control:=false
 ```
+
+With `launch_moveit:=true`, the launch file defaults arm, gripper, and pixel-grasp services to `/moveit_spot`. Perception still detects the 2D image pixel; the MoveIt bridge projects that pixel through registered hand-camera depth before sending the arm pose goal.
 
 Send the full fetch goal:
 

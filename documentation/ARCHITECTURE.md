@@ -69,6 +69,7 @@ These services are exposed under `/moveit_spot` when the MoveIt service bridge i
 | `/moveit_spot/close_gripper` | Close gripper |
 | `/moveit_spot/set_gripper_angle` | Spot-compatible gripper angle service |
 | `/moveit_spot/pose_goal` | `PoseStamped` topic for frame-relative MoveIt pose goals |
+| `/moveit_spot/grasp_pixel` | MoveIt pixel-grasp bridge using registered depth and camera info |
 
 ### Spot-Native Fallback Interfaces
 

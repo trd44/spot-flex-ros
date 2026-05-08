@@ -56,6 +56,7 @@ The MoveIt service bridge is launched in `/moveit_spot` by default.
 /moveit_spot/open_gripper
 /moveit_spot/close_gripper
 /moveit_spot/set_gripper_angle
+/moveit_spot/grasp_pixel
 ```
 
 ## Named Arm States
@@ -120,6 +121,32 @@ ros2 topic pub -1 /moveit_spot/pose_goal geometry_msgs/msg/PoseStamped \
   "{header: {frame_id: 'body'}, pose: {position: {x: 0.55, y: 0.15, z: 0.45}, orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}"
 ```
 
+## Pixel Grasp Bridge
+
+The MoveIt bridge also exposes a `spot_flex_msgs/srv/GraspPixel` service:
+
+```text
+/moveit_spot/grasp_pixel
+```
+
+This service is compatible with the perception pipeline that returns 2D image pixels. It uses the latest registered depth image and matching camera info to project the pixel into a 3D target pose, sends that target to MoveIt, and then closes the gripper.
+
+Default inputs:
+
+```text
+/spot/depth_registered/hand/image
+/spot/depth_registered/hand/camera_info
+```
+
+Example:
+
+```bash
+ros2 service call /moveit_spot/grasp_pixel spot_flex_msgs/srv/GraspPixel \
+  "{pixel_x: 320, pixel_y: 240, image_source: 'hand_color_image'}"
+```
+
+The bridge requires registered depth, camera info, TF, joint states, and hardware-compatible MoveIt controllers. If any required sensor input is unavailable, the service returns a failed response instead of sending a pose.
+
 ## Real Spot Pose Commands
 
 The Spot driver also accepts pose commands directly:
@@ -144,9 +171,7 @@ Enable MoveIt in the hardware demo:
 ```bash
 ros2 launch spot_flex_plan hardware_demo.launch.py \
   launch_moveit:=true \
-  moveit_use_mock_control:=false \
-  arm_service_prefix:=/moveit_spot \
-  perception_open_gripper_service:=/moveit_spot/open_gripper
+  moveit_use_mock_control:=false
 ```
 
-This path expects hardware-compatible controllers and joint states to be available. Spot SDK arm services remain available through `arm_service_prefix:=/spot`.
+With `launch_moveit:=true`, the hardware demo defaults arm, gripper, and pixel-grasp services to `/moveit_spot`. Spot SDK arm services remain available by overriding `arm_service_prefix:=/spot` and `perception_grasp_pixel_service:=/spot/grasp_pixel`.

@@ -36,7 +36,7 @@ ros2 action send_goal /fetch_item spot_flex_msgs/action/FetchItem \
 | --- | --- |
 | `GetPlan.srv` | Return an action sequence for a task. |
 | `GetHandPose.srv` | Return the current hand pose used by policy execution. |
-| `GraspPixel.srv` | Request a Spot SDK pixel grasp from an image source. |
+| `GraspPixel.srv` | Request a pixel grasp from an image source through MoveIt or the Spot SDK. |
 | `EstimateReactiveForce.srv` | Estimate contact force for reactive manipulation. |
 | `ImpedanceSettle.srv` | Hold arm impedance for a fixed duration. |
 | `PushObjectStep.srv` | Execute one object-pushing step. |

@@ -12,7 +12,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetEnvironmentVariable
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -38,6 +38,9 @@ def generate_launch_description():
     moveit_use_mock_control = LaunchConfiguration('moveit_use_mock_control')
     moveit_launch_arm_services = LaunchConfiguration('moveit_launch_arm_services')
     moveit_arm_namespace = LaunchConfiguration('moveit_arm_namespace')
+    moveit_grasp_depth_topic = LaunchConfiguration('moveit_grasp_depth_topic')
+    moveit_grasp_camera_info_topic = LaunchConfiguration('moveit_grasp_camera_info_topic')
+    moveit_grasp_target_frame = LaunchConfiguration('moveit_grasp_target_frame')
     policy_dry_run = LaunchConfiguration('policy_dry_run')
     policy_use_learned = LaunchConfiguration('policy_use_learned')
     push_model_dir = LaunchConfiguration('push_model_dir')
@@ -191,14 +194,22 @@ def generate_launch_description():
             description='Nav2 NavigateToPose action consumed when nav_backend:=nav2.',
         ),
         DeclareLaunchArgument(
-            'arm_service_prefix',
-            default_value='/spot',
-            description='Arm/gripper Trigger service prefix. Use /moveit_spot with launch_moveit:=true to route the demo through MoveIt services.',
-        ),
-        DeclareLaunchArgument(
             'launch_moveit',
             default_value='false',
             description='Launch MoveIt arm planning/services alongside the hardware demo.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_launch_arm_services',
+            default_value='true',
+            description='Expose MoveIt-backed arm Trigger services.',
+        ),
+        DeclareLaunchArgument(
+            'arm_service_prefix',
+            default_value=PythonExpression([
+                "'/moveit_spot' if '", launch_moveit, "' == 'true' and '",
+                moveit_launch_arm_services, "' == 'true' else '/spot'"
+            ]),
+            description='Arm/gripper Trigger service prefix. Defaults to /moveit_spot when launch_moveit:=true.',
         ),
         DeclareLaunchArgument(
             'moveit_use_sim_time',
@@ -216,14 +227,24 @@ def generate_launch_description():
             description='Launch mock ros2_control controllers for MoveIt. Keep false for hardware.',
         ),
         DeclareLaunchArgument(
-            'moveit_launch_arm_services',
-            default_value='true',
-            description='Expose MoveIt-backed arm Trigger services.',
-        ),
-        DeclareLaunchArgument(
             'moveit_arm_namespace',
             default_value='moveit_spot',
             description='Namespace for MoveIt-backed arm services.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_grasp_depth_topic',
+            default_value='/spot/depth_registered/hand/image',
+            description='Registered depth topic used by /moveit_spot/grasp_pixel.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_grasp_camera_info_topic',
+            default_value='/spot/depth_registered/hand/camera_info',
+            description='CameraInfo topic used by /moveit_spot/grasp_pixel.',
+        ),
+        DeclareLaunchArgument(
+            'moveit_grasp_target_frame',
+            default_value='',
+            description='Optional frame override for /moveit_spot/grasp_pixel projected poses.',
         ),
         DeclareLaunchArgument(
             'policy_dry_run',
@@ -620,8 +641,11 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'perception_open_gripper_service',
-            default_value='/spot/open_gripper',
-            description='Trigger service used before box hand-camera perception.',
+            default_value=PythonExpression([
+                "'/moveit_spot/open_gripper' if '", launch_moveit, "' == 'true' and '",
+                moveit_launch_arm_services, "' == 'true' else '/spot/open_gripper'"
+            ]),
+            description='Trigger service used before hand-camera perception.',
         ),
         DeclareLaunchArgument(
             'perception_open_gripper_before_box_image',
@@ -656,7 +680,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'perception_grasp_object_after_detection',
             default_value='true',
-            description='Run Spot grasp_pixel after detecting the object via OWL.',
+            description='Run pixel grasp after detecting the object via OWL.',
         ),
         DeclareLaunchArgument(
             'perception_gripper_settle_sec',
@@ -671,17 +695,20 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'perception_grasp_box_after_detection',
             default_value='true',
-            description='Run Spot manipulation grasp after finding the box edge pixel.',
+            description='Run pixel grasp after finding the box edge pixel.',
         ),
         DeclareLaunchArgument(
             'perception_grasp_handle_after_detection',
             default_value='true',
-            description='Run Spot manipulation grasp after finding the cabinet handle pixel.',
+            description='Run pixel grasp after finding the cabinet handle pixel.',
         ),
         DeclareLaunchArgument(
             'perception_grasp_pixel_service',
-            default_value='/spot/grasp_pixel',
-            description='Spot driver service that runs SDK PickObjectInImage for a hand-camera pixel.',
+            default_value=PythonExpression([
+                "'/moveit_spot/grasp_pixel' if '", launch_moveit, "' == 'true' and '",
+                moveit_launch_arm_services, "' == 'true' else '/spot/grasp_pixel'"
+            ]),
+            description='Pixel grasp service. Defaults to MoveIt when launch_moveit:=true, otherwise Spot SDK.',
         ),
         DeclareLaunchArgument(
             'perception_grasp_image_source',
@@ -770,6 +797,9 @@ def generate_launch_description():
                 'use_mock_control': moveit_use_mock_control,
                 'launch_arm_services': moveit_launch_arm_services,
                 'arm_services_namespace': moveit_arm_namespace,
+                'grasp_depth_topic': moveit_grasp_depth_topic,
+                'grasp_camera_info_topic': moveit_grasp_camera_info_topic,
+                'grasp_target_frame': moveit_grasp_target_frame,
             }.items(),
             condition=IfCondition(launch_moveit),
         ),
