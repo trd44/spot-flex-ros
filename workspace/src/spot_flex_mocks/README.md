@@ -20,7 +20,7 @@ source install/setup.bash
 | `mock_nav_server` | Provides navigation-like action responses. |
 | `mock_perception_server` | Provides perception action responses. |
 | `mock_policy_server` | Provides policy execution action responses. |
-| `mock_spot_services` | Provides Spot-style arm, gripper, dock, and service responses. |
+| `mock_spot_services` | Provides Spot-style arm, gripper, gripper-angle, dock, and service responses. |
 
 ## Running Mocks
 

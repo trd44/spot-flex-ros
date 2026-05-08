@@ -20,6 +20,7 @@ RUN apt-get update -q && \
     curl \
     wget \
     git \
+    build-essential \
     python3-pip \
     python-is-python3 \
     python3-argcomplete \
@@ -30,8 +31,13 @@ RUN apt-get update -q && \
     python3-distutils \
     python3-apt \
     python3-numpy \
+    python3-scipy \
+    python3-sklearn \
+    python3-pytest-cov \
     python3-yaml \
     libpython3-dev \
+    libopencv-dev \
+    protobuf-compiler \
     python3-tk \
     xauth \
     libegl1-mesa \
@@ -53,9 +59,16 @@ RUN apt-get update -q && \
     ros-humble-tl-expected \
     ros-humble-rviz2 \
     ros-humble-joint-state-publisher \
+    ros-humble-joint-state-publisher-gui \
     ros-humble-robot-state-publisher \
     ros-humble-xacro \
+    ros-humble-bondpy \
+    ros-humble-depth-image-proc \
+    ros-humble-example-interfaces \
+    ros-humble-image-transport \
+    ros-humble-launch-pytest \
     ros-humble-tf2-ros \
+    ros-humble-tf2-eigen \
     ros-humble-tf2-tools \
     gz-fortress \
     ros-humble-ign-ros2-control \
@@ -69,6 +82,9 @@ RUN apt-get update -q && \
     ros-humble-tf2-sensor-msgs \
     ros-humble-cv-bridge \
     ros-humble-moveit \
+    ros-humble-yasmin \
+    ros-humble-yasmin-ros \
+    ros-humble-yasmin-viewer \
     && rm -rf /var/lib/apt/lists/*
 
 # Boston Dynamics SDK version (must match spot_ros2/spot_wrapper)
@@ -91,7 +107,8 @@ RUN ARCH=$(dpkg --print-architecture) && \
 
 # Install spot_wrapper python requirements (includes bosdyn-client, etc.)
 COPY workspace/src/spot_ros2/spot_wrapper/requirements.txt /tmp/spot_wrapper_requirements.txt
-RUN pip install --no-cache-dir -r /tmp/spot_wrapper_requirements.txt && \
+RUN python3 -m pip install --no-cache-dir -r /tmp/spot_wrapper_requirements.txt && \
+    python3 -m pip install --no-cache-dir "Flask==2.2.5" && \
     rm /tmp/spot_wrapper_requirements.txt
 
 # Perception ML dependencies and model cache.
@@ -99,19 +116,19 @@ ENV SPOT_FLEX_MODEL_DIR=/opt/spot_flex_model_cache
 ENV HF_HOME=/opt/spot_flex_model_cache/huggingface
 ENV TRANSFORMERS_CACHE=/opt/spot_flex_model_cache/huggingface/hub
 
-RUN pip install --no-cache-dir \
-    "Pillow>=10.4,<12" \
-    torch \
-    torchvision \
-    transformers \
-    segment-anything && \
+RUN python3 -m pip install --no-cache-dir \
+    "Pillow==11.3.0" \
+    "torch==2.11.0" \
+    "torchvision==0.26.0" \
+    "transformers==5.6.2" \
+    "segment-anything==1.0" && \
     mkdir -p "${SPOT_FLEX_MODEL_DIR}/sam" "${HF_HOME}" && \
     python3 -c "from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor; model_id='google/owlv2-base-patch16-ensemble'; AutoProcessor.from_pretrained(model_id); AutoModelForZeroShotObjectDetection.from_pretrained(model_id)" && \
     wget -q -O "${SPOT_FLEX_MODEL_DIR}/sam/sam_vit_b_01ec64.pth" \
       "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth"
 
 # Pin setuptools version that spot_ros2 expects
-RUN pip install --no-cache-dir --force-reinstall "setuptools==59.6.0"
+RUN python3 -m pip install --no-cache-dir --force-reinstall "setuptools==59.6.0"
 
 # Initialize rosdep
 RUN rosdep init || true && rosdep update

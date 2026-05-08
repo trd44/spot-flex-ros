@@ -66,6 +66,8 @@ Primary frameworks and tools:
 
 Requires Docker and VS Code with the Dev Containers extension.
 
+### Clone The Repository
+
 ```bash
 git clone https://github.com/trd44/spot-flex-ros.git
 cd spot-flex-ros
@@ -74,16 +76,52 @@ cp .env_example .env
 
 Edit `.env` with the Spot network and login configuration when hardware access is required.
 
-Open the repository in VS Code and choose **Reopen in Container**.
+### Option 1: Build The Dev Container Locally
+
+This is the default path. Open the repository in VS Code and choose **Reopen in Container**. VS Code uses `.devcontainer/Dockerfile` to build the container.
+
+### Option 2: Use The Preserved Docker Hub Image
+
+To use a preserved container image instead of rebuilding the dev container from the Dockerfile:
+
+```bash
+docker pull tduggan93/spot-flex-ros:submission-freeze
+```
+
+Then edit `.devcontainer/devcontainer.json` and replace the `build` block:
+
+```json
+"build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+}
+```
+
+with:
+
+```json
+"image": "tduggan93/spot-flex-ros:submission-freeze"
+```
+
+Keep the existing `workspaceMount`, `workspaceFolder`, `containerEnv`, `runArgs`, and `postStartCommand` entries. After saving the file, open the repository in VS Code and choose **Reopen in Container**.
+
+The Docker image preserves installed packages and container filesystem changes, but the repository is still mounted from the local checkout at `/repo`. Source code changes should be preserved with Git or a separate source archive.
+
+### Build The Workspace
 
 Inside the container:
 
 ```bash
 cd /repo/workspace
 source /opt/ros/humble/setup.bash
+rosdep update
+rosdep install --from-paths src --ignore-src -r -y \
+  --skip-keys "ament_python bosdyn bosdyn_msgs spot_wrapper bosdyn_cmake_module"
 colcon build --symlink-install
 source install/setup.bash
 ```
+
+Container and launch smoke tests are documented in [documentation/VALIDATION.md](documentation/VALIDATION.md). Run those checks after rebuilding the dev container or switching to the preserved Docker Hub image.
 
 Perception model setup is documented in [workspace/model_cache/README.md](workspace/model_cache/README.md). That cache includes the OWLv2 Hugging Face model and the Segment Anything checkpoint used by `spot_flex_perception`.
 
@@ -143,6 +181,8 @@ GraphNav map download, localization, and named waypoint commands are documented 
 
 The simulation demo starts Gazebo, bridge nodes, Nav2, and RViz:
 
+If running on macOS, see the [noVNC display workaround](#novnc-display-workaround-on-macos) before launching Gazebo or RViz from the container.
+
 ```bash
 cd /repo/workspace
 source /opt/ros/humble/setup.bash
@@ -162,6 +202,8 @@ Additional simulation and noVNC commands are documented in [spot_flex_sim](works
 ## MoveIt Simulation Demo
 
 The MoveIt demo starts a mock Spot arm, mock controllers, `move_group`, and optional RViz:
+
+If running on macOS, see the [noVNC display workaround](#novnc-display-workaround-on-macos) before launching RViz from the container.
 
 ```bash
 cd /repo/workspace
@@ -198,3 +240,81 @@ Perception action examples and offline detector checks are documented in [spot_f
 ## Network Notes
 
 Spot commonly uses `192.168.80.3` on its own network. Hardware credentials and connection settings should be configured in `.env` and the Spot driver configuration used by `launch_spot.sh`.
+
+
+## noVNC Display Workaround On macOS
+
+When working on macOS, displaying RViz, Gazebo, or MoveIt directly from inside the Docker container can be unreliable because of X11/OpenGL forwarding issues. The recommended workaround is to run the GUI tools inside a virtual display in the container and view that display through noVNC in a browser.
+
+Start the virtual display inside the container:
+
+```bash
+cd /repo/workspace
+./src/spot_flex_sim/scripts/start_virtual_display.sh
+source ./src/spot_flex_sim/scripts/virtual_display_env.sh
+```
+
+Open the browser client on the host:
+
+```text
+http://localhost:6080/vnc.html?autoconnect=1&resize=scale
+```
+
+If VS Code does not open the port automatically, forward container port `6080` from the **Ports** panel.
+
+Then launch GUI demos normally from the same terminal. For example:
+
+```bash
+ros2 launch spot_flex_sim nav2_demo.launch.py headless:=false rviz:=true
+```
+
+The simulation package also provides a wrapper that starts noVNC and launches the Gazebo/Nav2 demo:
+
+```bash
+./src/spot_flex_sim/scripts/launch_gazebo_vnc.sh
+```
+
+For the MoveIt RViz demo through noVNC:
+
+```bash
+./src/spot_flex_moveit/scripts/launch_moveit_vnc.sh
+```
+
+Stop the virtual display when finished:
+
+```bash
+./src/spot_flex_sim/scripts/stop_virtual_display.sh
+```
+
+## Preserving The Current Container
+
+The current working container can be committed and pushed to Docker Hub as a preservation snapshot. This is useful before a submission or demo, but it should not replace keeping the source repository in Git.
+
+Commit the running container to a local image:
+
+```bash
+docker commit eee8c5e0d94a tduggan93/spot-flex-ros:submission-freeze
+```
+
+Log in and push the image:
+
+```bash
+docker login
+docker push tduggan93/spot-flex-ros:submission-freeze
+```
+
+Optional dated tag:
+
+```bash
+TAG=submission-freeze-$(date +%Y%m%d)
+docker tag tduggan93/spot-flex-ros:submission-freeze tduggan93/spot-flex-ros:$TAG
+docker push tduggan93/spot-flex-ros:$TAG
+```
+
+Save the container run metadata:
+
+```bash
+docker inspect eee8c5e0d94a > spot-flex-container-inspect.json
+```
+
+Because the dev container bind-mounts the repository into `/repo`, `docker commit` does not preserve the checked-out source tree. Preserve the repository separately with Git or an archive before relying on the Docker image snapshot.
