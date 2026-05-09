@@ -34,6 +34,16 @@ FetchItem action
 
 See [documentation/ARCHITECTURE.md](documentation/ARCHITECTURE.md) for the full system design.
 
+## Project Requirement Map
+
+| Requirement | Primary files | Notes |
+| --- | --- | --- |
+| MoveIt | [spot_flex_moveit launch](workspace/src/spot_flex_moveit/launch/moveit_demo.launch.py), [MoveIt config](workspace/src/spot_flex_moveit/config), [MoveIt service bridge](workspace/src/spot_flex_control/spot_flex_control/arm_node.py) | Provides the simulated MoveIt arm demo, MoveIt-backed arm/gripper services, pose goals, and the pixel-to-grasp bridge. |
+| Nav2 | [Nav2 simulation launch](workspace/src/spot_flex_sim/launch/nav2_demo.launch.py), [Nav2 params](workspace/src/spot_flex_nav/config/nav2_sim_odom_params.yaml), [navigation adapter](workspace/src/spot_flex_control/spot_flex_control/nav_node.py), [Nav2 package README](workspace/src/spot_flex_nav/README.md) | Nav2 is demonstrated in Gazebo simulation and can be enabled for hardware with `launch_nav2:=true`. |
+| Perception | [perception server](workspace/src/spot_flex_perception/spot_flex_perception/perception_server_node.py), [OWL detector](workspace/src/spot_flex_perception/spot_flex_perception/owl_detector.py), [box grasp detector](workspace/src/spot_flex_perception/spot_flex_perception/box_grasp_detector.py), [cabinet detector](workspace/src/spot_flex_perception/spot_flex_perception/cabinet_handle_detector.py) | Provides object, box grasp, and cabinet-handle perception actions. Model setup is documented in [workspace/model_cache/README.md](workspace/model_cache/README.md). |
+| Custom components | [custom actions/services](workspace/src/spot_flex_msgs), [task conductor](workspace/src/spot_flex_plan/spot_flex_plan/conductor_node.py), [fetch FSM](workspace/src/spot_flex_plan/spot_flex_plan/demo_fsm.py), [hardware launch](workspace/src/spot_flex_plan/launch/hardware_demo.launch.py), [policy server](workspace/src/spot_flex_control/spot_flex_control/policy_server_node.py), [Nav2/GraphNav adapter](workspace/src/spot_flex_control/spot_flex_control/nav_node.py), [MoveIt arm bridge](workspace/src/spot_flex_control/spot_flex_control/arm_node.py), [mock servers](workspace/src/spot_flex_mocks/spot_flex_mocks), [operator UI node](workspace/src/spot_flex_ui/spot_flex_ui/ui_node.py) | The custom stack coordinates task planning, navigation backend selection, perception, policy execution, MoveIt/Spot arm service routing, gripper control, mock testing, and fallback hardware backends. |
+| Hand-written node | [conductor_node.py](workspace/src/spot_flex_plan/spot_flex_plan/conductor_node.py) | Hand-written ROS 2 node for coordinating the sequence of the fetch demo. |
+
 ## Custom Packages
 
 | Package | Purpose | Documentation |
